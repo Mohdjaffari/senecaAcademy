@@ -4,16 +4,13 @@ import { jwtVerify } from "jose";
 
 const SESSION_COOKIE_NAME = "seneca_lms_session";
 const OFFICIAL_CANONICAL_URL =
-  process.env.NEXT_PUBLIC_CANONICAL_URL || "https://seneca.edu.pk";
+  process.env.NEXT_PUBLIC_CANONICAL_URL || "https://senecaacademy.school";
 
 const DEFAULT_ALLOWED_HOSTS = [
   "localhost",
   "127.0.0.1",
   "::1",
-  "seneca.edu.pk",
-  "www.seneca.edu.pk",
-  "seneca-academy.vercel.app",
-  "seneca-school-lms.vercel.app",
+  "senecaacademy.school",
 ];
 
 const isLocalOrPrivateNetwork = (hostname: string): boolean => {
