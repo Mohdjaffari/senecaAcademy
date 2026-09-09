@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 460" width="600" height="460">
+  <!-- Crest Seal on Top Right -->
+  <g transform="translate(435, 175)">
+    <circle cx="0" cy="0" r="86" fill="#E27519" stroke="#C45E0B" stroke-width="1.5" />
+    <text x="-50" y="25" font-size="94" font-weight="bold" fill="#881218" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">S</text>
+    <text x="-12" y="40" font-size="94" font-weight="bold" fill="#881218" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">A</text>
+    <path d="M 5 -12 C 5 -46 23 -64 49 -70 C 25 -62 12 -39 12 -12 C 12 16 26 43 53 39 C 25 34 5 14 5 -12 Z" fill="#FFFFFF" />
+    <polygon points="50,-41 53,-29 65,-29 55,-21 59,-9 50,-15 41,-9 44,-21 34,-29 47,-29" fill="#FFFFFF" />
+
+    <!-- Curved Motto -->
+    <g font-family="'Times New Roman', Georgia, serif" font-size="13px" font-weight="bold" fill="#481418">
+      
+    <text transform="rotate(-58.0) translate(0, -101)" text-anchor="middle">N</text>
+    <text transform="rotate(-50.3) translate(0, -101)" text-anchor="middle">o</text>
+    <text transform="rotate(-42.5) translate(0, -101)" text-anchor="middle">n</text>
+    <text transform="rotate(-27.1) translate(0, -101)" text-anchor="middle">s</text>
+    <text transform="rotate(-19.3) translate(0, -101)" text-anchor="middle">c</text>
+    <text transform="rotate(-11.6) translate(0, -101)" text-anchor="middle">h</text>
+    <text transform="rotate(-3.9) translate(0, -101)" text-anchor="middle">o</text>
+    <text transform="rotate(3.9) translate(0, -101)" text-anchor="middle">l</text>
+    <text transform="rotate(11.6) translate(0, -101)" text-anchor="middle">a</text>
+    <text transform="rotate(19.3) translate(0, -101)" text-anchor="middle">e</text>
+    <text transform="rotate(27.1) translate(0, -101)" text-anchor="middle">,</text>
+    <text transform="rotate(42.5) translate(0, -101)" text-anchor="middle">s</text>
+    <text transform="rotate(50.3) translate(0, -101)" text-anchor="middle">e</text>
+    <text transform="rotate(58.0) translate(0, -101)" text-anchor="middle">d</text>
+      
+    <text transform="rotate(235.0) translate(0, -101) rotate(180)" text-anchor="middle">v</text>
+    <text transform="rotate(226.5) translate(0, -101) rotate(180)" text-anchor="middle">i</text>
+    <text transform="rotate(218.1) translate(0, -101) rotate(180)" text-anchor="middle">t</text>
+    <text transform="rotate(209.6) translate(0, -101) rotate(180)" text-anchor="middle">a</text>
+    <text transform="rotate(201.2) translate(0, -101) rotate(180)" text-anchor="middle">e</text>
+    <text transform="rotate(184.2) translate(0, -101) rotate(180)" text-anchor="middle">d</text>
+    <text transform="rotate(175.8) translate(0, -101) rotate(180)" text-anchor="middle">i</text>
+    <text transform="rotate(167.3) translate(0, -101) rotate(180)" text-anchor="middle">s</text>
+    <text transform="rotate(158.8) translate(0, -101) rotate(180)" text-anchor="middle">c</text>
+    <text transform="rotate(150.4) translate(0, -101) rotate(180)" text-anchor="middle">i</text>
+    <text transform="rotate(141.9) translate(0, -101) rotate(180)" text-anchor="middle">m</text>
+    <text transform="rotate(133.5) translate(0, -101) rotate(180)" text-anchor="middle">u</text>
+    <text transform="rotate(125.0) translate(0, -101) rotate(180)" text-anchor="middle">s</text>
+    </g>
+  </g>
+
+  <!-- Big 'S' (Crimson) -->
+  <text x="25" y="325" font-size="340" font-weight="bold" fill="#881218" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">S</text>
+  
+  <!-- Interlocking Big 'A' (Amber) -->
+  <text x="65" y="425" font-size="280" font-weight="bold" fill="#E27519" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">A</text>
+
+  <!-- 'eneca' (Crimson) -->
+  <text x="255" y="340" font-size="82" font-weight="bold" fill="#881218" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">eneca</text>
+  
+  <!-- 'cademy' (Amber) -->
+  <text x="255" y="422" font-size="78" font-weight="bold" fill="#E27519" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">cademy</text>
+</svg>

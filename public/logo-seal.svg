@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <g transform="translate(160, 160)">
+    <!-- Circular Amber Badge -->
+    <circle cx="0" cy="0" r="96" fill="#E27519" stroke="#C45E0B" stroke-width="1.5" />
+    
+    <!-- Monogram SA -->
+    <text x="-56" y="28" font-size="104" font-weight="bold" fill="#881218" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">S</text>
+    <text x="-14" y="44" font-size="104" font-weight="bold" fill="#881218" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">A</text>
+    
+    <!-- White Crescent Moon -->
+    <path d="M 6 -14 C 6 -52 26 -72 56 -78 C 28 -70 14 -44 14 -14 C 14 18 30 48 60 44 C 28 38 6 16 6 -14 Z" fill="#FFFFFF" />
+    
+    <!-- White 5-Point Star -->
+    <polygon points="56,-46 59,-32 73,-32 61,-23 66,-9 56,-17 45,-9 49,-23 38,-32 52,-32" fill="#FFFFFF" />
+
+    <!-- Motto Text -->
+    <g font-family="'Times New Roman', Georgia, serif" font-size="14.5px" font-weight="bold" fill="#481418">
+      
+    <text transform="rotate(-58.0) translate(0, -114)" text-anchor="middle">N</text>
+    <text transform="rotate(-50.3) translate(0, -114)" text-anchor="middle">o</text>
+    <text transform="rotate(-42.5) translate(0, -114)" text-anchor="middle">n</text>
+    <text transform="rotate(-27.1) translate(0, -114)" text-anchor="middle">s</text>
+    <text transform="rotate(-19.3) translate(0, -114)" text-anchor="middle">c</text>
+    <text transform="rotate(-11.6) translate(0, -114)" text-anchor="middle">h</text>
+    <text transform="rotate(-3.9) translate(0, -114)" text-anchor="middle">o</text>
+    <text transform="rotate(3.9) translate(0, -114)" text-anchor="middle">l</text>
+    <text transform="rotate(11.6) translate(0, -114)" text-anchor="middle">a</text>
+    <text transform="rotate(19.3) translate(0, -114)" text-anchor="middle">e</text>
+    <text transform="rotate(27.1) translate(0, -114)" text-anchor="middle">,</text>
+    <text transform="rotate(42.5) translate(0, -114)" text-anchor="middle">s</text>
+    <text transform="rotate(50.3) translate(0, -114)" text-anchor="middle">e</text>
+    <text transform="rotate(58.0) translate(0, -114)" text-anchor="middle">d</text>
+      
+    <text transform="rotate(235.0) translate(0, -114) rotate(180)" text-anchor="middle">v</text>
+    <text transform="rotate(226.5) translate(0, -114) rotate(180)" text-anchor="middle">i</text>
+    <text transform="rotate(218.1) translate(0, -114) rotate(180)" text-anchor="middle">t</text>
+    <text transform="rotate(209.6) translate(0, -114) rotate(180)" text-anchor="middle">a</text>
+    <text transform="rotate(201.2) translate(0, -114) rotate(180)" text-anchor="middle">e</text>
+    <text transform="rotate(184.2) translate(0, -114) rotate(180)" text-anchor="middle">d</text>
+    <text transform="rotate(175.8) translate(0, -114) rotate(180)" text-anchor="middle">i</text>
+    <text transform="rotate(167.3) translate(0, -114) rotate(180)" text-anchor="middle">s</text>
+    <text transform="rotate(158.8) translate(0, -114) rotate(180)" text-anchor="middle">c</text>
+    <text transform="rotate(150.4) translate(0, -114) rotate(180)" text-anchor="middle">i</text>
+    <text transform="rotate(141.9) translate(0, -114) rotate(180)" text-anchor="middle">m</text>
+    <text transform="rotate(133.5) translate(0, -114) rotate(180)" text-anchor="middle">u</text>
+    <text transform="rotate(125.0) translate(0, -114) rotate(180)" text-anchor="middle">s</text>
+    </g>
+  </g>
+</svg>

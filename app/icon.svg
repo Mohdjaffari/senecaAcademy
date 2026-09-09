@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <defs>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B" />
+      <stop offset="60%" stop-color="#E27519" />
+      <stop offset="100%" stop-color="#C45E0B" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(160, 160)">
+    <!-- Circular Amber Badge -->
+    <circle cx="0" cy="0" r="148" fill="url(#amberGrad)" stroke="#810D0B" stroke-width="6" />
+    <circle cx="0" cy="0" r="138" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.6" />
+    
+    <!-- Monogram SA -->
+    <text x="-80" y="44" font-size="150" font-weight="900" fill="#810D0B" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">S</text>
+    <text x="-20" y="65" font-size="150" font-weight="900" fill="#810D0B" font-family="'Times New Roman', 'Playfair Display', Georgia, serif">A</text>
+    
+    <!-- White Crescent Moon -->
+    <path d="M 8 -22 C 8 -76 38 -104 82 -112 C 40 -100 20 -64 20 -20 C 20 26 44 68 86 64 C 40 54 8 22 8 -22 Z" fill="#FFFFFF" />
+    
+    <!-- White 5-Point Star -->
+    <polygon points="80,-66 84,-46 104,-46 87,-33 94,-13 80,-24 64,-13 70,-33 54,-46 74,-46" fill="#FFFFFF" />
+  </g>
+</svg>

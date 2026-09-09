@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Seneca Crimson as Primary: #810D0B -> hsl(359, 83%, 28%) */
+    --primary: 359 83% 28%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Seneca Amber as Secondary: #E27B1F -> hsl(28, 80%, 50%) */
+    --secondary: 28 80% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 28 80% 95%;
+    --accent-foreground: 359 83% 28%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 359 83% 28%;
+
+    --radius: 0.75rem;
+
+    /* Dashboard Sidebar Specific Tokens */
+    --sidebar-background: 222 35% 8%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 359 83% 28%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 25% 15%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 222 20% 16%;
+    --sidebar-ring: 28 80% 50%;
+  }
+
+  .dark {
+    --background: 222 35% 8%;
+    --foreground: 210 20% 98%;
+
+    --card: 222 30% 12%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 222 30% 12%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 359 75% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 28 85% 55%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 222 25% 18%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 222 25% 20%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 20% 18%;
+    --input: 222 20% 18%;
+    --ring: 28 85% 55%;
+
+    --sidebar-background: 222 40% 6%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 359 75% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 30% 14%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 222 25% 14%;
+    --sidebar-ring: 28 85% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    max-width: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    max-width: 100%;
+    overflow-x: clip;
+    position: relative;
+    width: 100%;
+  }
+}
+
+/* Glassmorphic utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.dark .glass-panel {
+  background: rgba(26, 29, 39, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(129, 13, 11, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(129, 13, 11, 0.4);
+}
