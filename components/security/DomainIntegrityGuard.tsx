@@ -23,6 +23,8 @@ const DEFAULT_ALLOWED_HOSTS = [
   "localhost",
   "127.0.0.1",
   "::1",
+  "senecaacademy.school",
+  "www.senecaacademy.school",
   "seneca.edu.pk",
   "www.seneca.edu.pk",
   "seneca-academy.vercel.app",
@@ -30,13 +32,20 @@ const DEFAULT_ALLOWED_HOSTS = [
 ];
 
 const OFFICIAL_PRODUCTION_URL =
-  process.env.NEXT_PUBLIC_CANONICAL_URL || "https://seneca.edu.pk";
+  process.env.NEXT_PUBLIC_CANONICAL_URL || "https://senecaacademy.school";
 
 export function DomainIntegrityGuard() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     try {
+      if (
+        process.env.NEXT_PUBLIC_DISABLE_DOMAIN_GUARD === "true" ||
+        process.env.NEXT_PUBLIC_DISABLE_DOMAIN_GUARD === "1"
+      ) {
+        return;
+      }
+
       const currentHost = window.location.hostname.toLowerCase();
 
       // ALWAYS allow all local development, Wi-Fi LAN testing (e.g. 192.168.1.45:3000), and dev server ports
@@ -48,8 +57,10 @@ export function DomainIntegrityGuard() {
         return;
       }
 
-      const allowedEnvHosts = (process.env.NEXT_PUBLIC_ALLOWED_HOSTS || "")
-        .split(",")
+      const allowedEnvHosts = [
+        ...(process.env.NEXT_PUBLIC_ALLOWED_HOSTS || "").split(","),
+        ...(process.env.ALLOWED_HOSTS || "").split(","),
+      ]
         .map((h) => h.trim().toLowerCase())
         .filter(Boolean);
 
@@ -63,7 +74,10 @@ export function DomainIntegrityGuard() {
         }
         return (
           currentHost === allowed ||
+          currentHost.endsWith(".senecaacademy.school") ||
+          currentHost.endsWith(".seneca.edu.pk") ||
           currentHost.endsWith(".vercel.app") ||
+          currentHost.endsWith(".hostingerapp.com") ||
           currentHost.endsWith(".localhost")
         );
       });

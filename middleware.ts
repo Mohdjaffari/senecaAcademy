@@ -11,6 +11,11 @@ const DEFAULT_ALLOWED_HOSTS = [
   "127.0.0.1",
   "::1",
   "senecaacademy.school",
+  "www.senecaacademy.school",
+  "seneca.edu.pk",
+  "www.seneca.edu.pk",
+  "seneca-academy.vercel.app",
+  "seneca-school-lms.vercel.app",
 ];
 
 const isLocalOrPrivateNetwork = (hostname: string): boolean => {
@@ -55,16 +60,27 @@ async function verifyToken(token: string): Promise<DecodedSession | null> {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  const forwardedHost = (request.headers.get("x-forwarded-host") || "").split(",")[0].trim();
+  const rawHost = (request.headers.get("host") || "").trim();
+  const host = (forwardedHost || rawHost).split(":")[0].toLowerCase();
 
   // 1. Anti-Clone & Unauthorized Host Integrity Verification (Production Only, Never on local LAN/Wi-Fi)
+  const isDomainGuardDisabled =
+    process.env.DISABLE_DOMAIN_GUARD === "true" ||
+    process.env.DISABLE_DOMAIN_GUARD === "1" ||
+    process.env.NEXT_PUBLIC_DISABLE_DOMAIN_GUARD === "true" ||
+    process.env.NEXT_PUBLIC_DISABLE_DOMAIN_GUARD === "1";
+
   if (
+    !isDomainGuardDisabled &&
     host &&
     process.env.NODE_ENV === "production" &&
     !isLocalOrPrivateNetwork(host)
   ) {
-    const allowedEnvHosts = (process.env.ALLOWED_HOSTS || "")
-      .split(",")
+    const allowedEnvHosts = [
+      ...(process.env.ALLOWED_HOSTS || "").split(","),
+      ...(process.env.NEXT_PUBLIC_ALLOWED_HOSTS || "").split(","),
+    ]
       .map((h) => h.trim().toLowerCase())
       .filter(Boolean);
 
@@ -77,7 +93,10 @@ export async function middleware(request: NextRequest) {
       }
       return (
         host === allowed ||
+        host.endsWith(".senecaacademy.school") ||
+        host.endsWith(".seneca.edu.pk") ||
         host.endsWith(".vercel.app") ||
+        host.endsWith(".hostingerapp.com") ||
         host.endsWith(".localhost")
       );
     });
