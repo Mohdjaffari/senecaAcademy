@@ -432,7 +432,7 @@ const WebsiteSettingsSchema = new Schema<IWebsiteSettings>(
   { timestamps: true }
 );
 
-if (mongoose.models && mongoose.models.WebsiteSettings) {
+if (process.env.NODE_ENV !== "production" && mongoose.models && mongoose.models.WebsiteSettings) {
   delete mongoose.models.WebsiteSettings;
 }
 

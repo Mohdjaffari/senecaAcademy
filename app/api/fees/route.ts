@@ -10,6 +10,7 @@ import User from "@/models/User";
 import { getSession } from "@/lib/auth/session";
 import { apiSuccess, apiError } from "@/lib/utils/api-response";
 import { AuthenticationError, AuthorizationError, ValidationError, NotFoundError } from "@/lib/utils/errors";
+import { isJuniorGrade, isSeniorGrade } from "@/lib/constants/campus-wing";
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
     const studentId = searchParams.get("studentId");
     const month = searchParams.get("month");
     const search = searchParams.get("search");
+    const wing = searchParams.get("wing") || (session as any).campusWing;
 
     // Automatically check and update overdue status for unpaid fees past due date
     const now = new Date();
@@ -66,6 +68,23 @@ export async function GET(req: NextRequest) {
     if (studentId && studentId !== "all") query.studentId = studentId;
     if (month && month !== "all") query.month = month;
 
+    if (wing === "junior" || wing === "senior") {
+      const isJunior = wing === "junior";
+      const classesInWing = await Class.find().select("_id gradeLevel").lean();
+      const filteredClassIds = classesInWing
+        .filter((c: any) => isJunior ? isJuniorGrade(c.gradeLevel) : isSeniorGrade(c.gradeLevel))
+        .map((c: any) => c._id);
+      if (!classId || classId === "all") {
+        query.classId = { $in: filteredClassIds };
+      }
+    }
+
+    const summaryQuery = session.role === "student"
+      ? query
+      : (wing === "junior" || wing === "senior")
+      ? { classId: query.classId }
+      : {};
+
     const [fees, allFeesForSummary, recentPayments] = await Promise.all([
       Fee.find(query)
         .populate({
@@ -78,8 +97,8 @@ export async function GET(req: NextRequest) {
         .limit(200)
         .lean(),
 
-      // Aggregate global summary across all fee records in the school
-      Fee.find(session.role === "student" ? query : {}).lean(),
+      // Aggregate summary across relevant fee records
+      Fee.find(summaryQuery).lean(),
 
       // Recent 50 payments for the reconciliation ledger
       FeePayment.find(session.role === "student" ? query : {})

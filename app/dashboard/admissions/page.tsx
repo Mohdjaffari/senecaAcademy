@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   UserPlus,
@@ -50,6 +50,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
+import { resolveClassWing } from "@/lib/constants/campus-wing";
 
 interface AdmissionApp {
   id: string;
@@ -145,6 +147,7 @@ const ADMISSION_GRADES = [
 ];
 
 export default function PrincipalAdmissionsPage() {
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [admissions, setAdmissions] = useState<AdmissionApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -174,12 +177,23 @@ export default function PrincipalAdmissionsPage() {
     fetchAdmissions();
   }, []);
 
-  const totalApps = admissions.length;
-  const pendingReview = admissions.filter((a) => a.status === "submitted" || a.status === "under_review").length;
-  const approvedCount = admissions.filter((a) => a.status === "approved" || a.status === "enrolled").length;
-  const testScheduled = admissions.filter((a) => a.status === "test_scheduled").length;
+  const scopedAdmissions = useMemo(() => {
+    if (activeWing === "all") return admissions;
+    return admissions.filter((a: AdmissionApp) => resolveClassWing(undefined, a.applyingForClass) === activeWing);
+  }, [admissions, activeWing]);
+
+  const totalApps = scopedAdmissions.length;
+  const pendingReview = scopedAdmissions.filter((a: AdmissionApp) => a.status === "submitted" || a.status === "under_review").length;
+  const approvedCount = scopedAdmissions.filter((a: AdmissionApp) => a.status === "approved" || a.status === "enrolled").length;
+  const testScheduled = scopedAdmissions.filter((a: AdmissionApp) => a.status === "test_scheduled").length;
 
   const filteredAdmissions = admissions.filter((a) => {
+    // Campus portal wing filter
+    if (activeWing !== "all") {
+      const appWing = resolveClassWing(undefined, a.applyingForClass);
+      if (appWing !== activeWing) return false;
+    }
+
     const matchesSearch =
       a.applicationNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -243,7 +257,16 @@ export default function PrincipalAdmissionsPage() {
   return (
     <div className="space-y-5 sm:space-y-8 animate-in fade-in-50 duration-300 w-full overflow-x-hidden">
       {/* 1. Header & Hero Metric Banner */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 bg-gradient-to-r from-seneca-crimson via-seneca-crimson-dark to-zinc-950 p-4 sm:p-8 text-white shadow-2xl">
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 p-4 sm:p-8 text-white shadow-2xl transition-all duration-300",
+          activeWing === "junior"
+            ? "seneca-junior-hero-gradient"
+            : activeWing === "senior"
+            ? "seneca-senior-hero-gradient"
+            : "seneca-hero-gradient"
+        )}
+      >
         <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-seneca-amber/20 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
@@ -251,7 +274,7 @@ export default function PrincipalAdmissionsPage() {
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-seneca-amber-light border border-white/10">
                 <FileCheck className="h-3 w-3" />
-                <span>Playgroup to 2nd Year Admissions Desk</span>
+                <span>{wingConfig.name}</span>
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] sm:text-[11px] font-bold border border-emerald-500/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -263,7 +286,11 @@ export default function PrincipalAdmissionsPage() {
               Admissions Desk & <span className="text-seneca-amber">Candidate Dossiers</span>
             </h1>
             <p className="text-xs sm:text-sm text-white/80 max-w-2xl leading-relaxed">
-              Review new admission candidates across all grades (Playgroup to 2nd Year / College), inspect uploaded document checklists, schedule Saturday diagnostic tests, and approve registrations.
+              {activeWing === "junior"
+                ? "Review foundational Early Childhood and Primary admission candidates (Playgroup, Nursery, KG, Grade 1, Grade 2), verify B-forms and parent profiles, and approve early enrollments."
+                : activeWing === "senior"
+                ? "Manage Middle, Secondary (Matric/Cambridge), and Intermediate candidate applications, previous SLC records, Saturday diagnostic assessments, and subject streaming."
+                : "Review new admission candidates across all grades (Playgroup to 2nd Year / College), inspect uploaded document checklists, schedule Saturday diagnostic tests, and approve registrations."}
             </p>
           </div>
 
@@ -326,7 +353,49 @@ export default function PrincipalAdmissionsPage() {
         </Card>
       </div>
 
-      {/* 3. Search & Filter Bar */}
+      {/* 3. Campus Wing Quick Filters & Search */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-muted/70 border border-border/80 w-fit">
+        <button
+          type="button"
+          onClick={() => setCampusWing("all")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all",
+            activeWing === "all"
+              ? "bg-card text-foreground shadow-sm border border-border/80"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          All Applications ({admissions.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCampusWing("junior")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5",
+            activeWing === "junior"
+              ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 shadow-sm border border-amber-500/30"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+          Junior Wing (&le; Gr 2) ({admissions.filter((a) => resolveClassWing(undefined, a.applyingForClass) === "junior").length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCampusWing("senior")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5",
+            activeWing === "senior"
+              ? "bg-seneca-crimson/15 text-seneca-crimson dark:text-seneca-amber-light shadow-sm border border-seneca-crimson/30"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <GraduationCap className="h-3 w-3 text-seneca-crimson" />
+          Senior Wing (&gt; Gr 2) ({admissions.filter((a) => resolveClassWing(undefined, a.applyingForClass) === "senior").length})
+        </button>
+      </div>
+
+      {/* Search & Filter Bar */}
       <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-xl rounded-2xl p-3 sm:p-4 space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className="relative flex-1">

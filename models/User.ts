@@ -6,10 +6,10 @@ export interface IUser extends Document {
   name: string;
   email: string;
   passwordHash: string;
-  rawPassword?: string;
   role: UserRole;
   avatarUrl?: string;
   phone?: string;
+  campusWing?: "junior" | "senior" | "all";
   status: "active" | "pending" | "suspended" | "deactivated";
   customPermissions: string[];
   lastLoginAt?: Date;
@@ -25,13 +25,16 @@ const UserSchema = new Schema<IUser>(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
-    rawPassword: { type: String },
     role: {
       type: String,
       enum: ["super_admin", "principal", "teacher", "student", "user"],
       default: "user",
       required: true,
       index: true,
+    },
+    campusWing: {
+      type: String,
+      enum: ["junior", "senior", "all"],
     },
     avatarUrl: { type: String },
     phone: { type: String, trim: true },
@@ -51,8 +54,8 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.index({ schoolId: 1, email: 1 }, { unique: true });
 
-// Ensure Mongoose hot-reloads the schema with updated enum values in Next.js dev server
-if (mongoose.models && mongoose.models.User) {
+// Ensure Mongoose hot-reloads the schema with updated enum values only in development
+if (process.env.NODE_ENV !== "production" && mongoose.models && mongoose.models.User) {
   delete mongoose.models.User;
 }
 

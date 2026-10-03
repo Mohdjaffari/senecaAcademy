@@ -15,11 +15,18 @@ export interface SessionPayload {
   profileId?: string;
   classId?: string;
   section?: string;
+  campusWing?: "junior" | "senior" | "all";
   permissions: Permission[];
 }
 
 function getEncodedKey(): Uint8Array {
-  const secret = process.env.AUTH_SECRET || "default_super_secret_auth_token_key_change_in_production_2026";
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("FATAL: AUTH_SECRET must be configured in environment variables for production security.");
+    }
+    return new TextEncoder().encode("default_super_secret_auth_token_key_change_in_production_2026");
+  }
   return new TextEncoder().encode(secret);
 }
 

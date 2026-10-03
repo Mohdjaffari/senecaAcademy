@@ -58,7 +58,7 @@ const HolidaySchema = new Schema<IHoliday>(
 
 HolidaySchema.index({ schoolId: 1, startDate: 1, endDate: 1 });
 
-if (mongoose.models && mongoose.models.Holiday) {
+if (process.env.NODE_ENV !== "production" && mongoose.models && mongoose.models.Holiday) {
   delete mongoose.models.Holiday;
 }
 

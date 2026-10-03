@@ -56,6 +56,8 @@ function LoginForm() {
     // Pre-warm common routes in the background
     try {
       router.prefetch("/dashboard");
+      router.prefetch("/junior-portal");
+      router.prefetch("/senior-portal");
       router.prefetch("/teacher");
       router.prefetch("/student");
     } catch (_) {}
@@ -133,16 +135,20 @@ function LoginForm() {
       }
 
       const role = data.data.user.role;
-      const roleDisplayName =
-        role === "principal"
-          ? "Management Dashboard"
-          : role === "super_admin"
-          ? "Super Admin Console"
-          : role === "teacher"
-          ? "Faculty Portal"
-          : role === "student"
-          ? "Student Workspace"
-          : "User Account";
+      const effectiveWing = data.data.user.campusWing;
+
+      let roleDisplayName = "Seneca Workspace";
+      if (effectiveWing === "junior" && (role === "principal" || role === "super_admin")) {
+        roleDisplayName = "Junior Wing Principal Portal (≤ Grade 2)";
+      } else if (effectiveWing === "senior" && (role === "principal" || role === "super_admin")) {
+        roleDisplayName = "Senior Wing Principal Portal (> Grade 2)";
+      } else if (role === "principal" || role === "super_admin") {
+        roleDisplayName = "Executive Management Dashboard";
+      } else if (role === "teacher") {
+        roleDisplayName = "Faculty Portal";
+      } else if (role === "student") {
+        roleDisplayName = "Student Workspace";
+      }
 
       const destination = redirectPath || data.data.redirectTo || "/";
 
@@ -172,7 +178,7 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-[420px] mx-auto space-y-3.5 sm:space-y-4 px-1 sm:px-0 relative overflow-hidden">
-      {/* Brand Header - Compact & Professional */}
+      {/* Brand Header */}
       <div className="flex flex-col items-center text-center space-y-2">
         <div className="relative flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-seneca-amber/20 via-seneca-crimson/10 to-card p-2 border border-seneca-amber/30 dark:border-seneca-amber/40 shadow-lg shadow-seneca-amber/5">
           <Image
@@ -193,7 +199,7 @@ function LoginForm() {
             Sign In to <span className="text-seneca-crimson dark:text-seneca-amber-light">Seneca</span>
           </h1>
           <p className="text-[11px] sm:text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
-            Enter your institutional email and password to access your dashboard.
+            Enter your institutional email and password to access your secure portal.
           </p>
         </div>
       </div>
@@ -267,7 +273,7 @@ function LoginForm() {
               </div>
             </div>
           ) : (
-            /* Standard Login Form */
+            /* Clean Minimalist Role-Based Login Form */
             <form onSubmit={handleLogin} className="space-y-3.5">
               {/* Email Address */}
               <div className="space-y-1">
@@ -364,7 +370,7 @@ function LoginForm() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full h-10 sm:h-11 text-xs sm:text-sm font-bold gap-1.5 rounded-xl shadow-md shadow-seneca-crimson/20 hover:shadow-lg hover:shadow-seneca-crimson/30 transition-all mt-1.5 bg-gradient-to-r from-seneca-crimson via-seneca-crimson-dark to-seneca-crimson text-white hover:brightness-110"
+                className="w-full h-10 sm:h-11 text-xs sm:text-sm font-bold gap-1.5 rounded-xl shadow-md transition-all mt-1.5 text-white hover:brightness-110 bg-gradient-to-r from-seneca-crimson via-seneca-crimson-dark to-seneca-crimson shadow-seneca-crimson/20 hover:shadow-seneca-crimson/30"
                 variant="glow"
               >
                 {loading ? (

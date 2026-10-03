@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     if (specialization && specialization !== "all") query.specialization = specialization;
 
     const teachers = await Teacher.find(query)
-      .populate("userId", "name email phone avatarUrl status rawPassword")
+      .populate("userId", "name email phone avatarUrl status")
       .populate("assignedClassIds", "name gradeLevel section")
       .populate("assignedSubjectIds", "name code department")
       .populate("headOfClassIds", "name gradeLevel section")
@@ -101,12 +101,49 @@ export async function GET(req: NextRequest) {
           const headOfClassIds = headOfClasses.map((h) => h.id);
           const isClassHead = headOfClasses.length > 0;
 
+          const assignedClassDetails = (t.assignedClassIds || []).map((c: any) => ({
+            id: c._id?.toString() || c.toString(),
+            name: c.name || "Class",
+            section: c.section || "A",
+            gradeLevel: c.gradeLevel ?? 0,
+          }));
+
+          let teachesJunior = false;
+          let teachesSenior = false;
+          const allClasses = [
+            ...headOfClasses,
+            ...assignedClassDetails,
+          ];
+
+          allClasses.forEach((c: any) => {
+            const gl = c?.gradeLevel;
+            if (typeof gl === "number") {
+              if (gl <= 2) teachesJunior = true;
+              if (gl > 2) teachesSenior = true;
+            } else if (c?.name) {
+              const cn = c.name.toLowerCase();
+              if (cn.includes("playgroup") || cn.includes("nursery") || cn.includes("prep") || cn.includes("kg") || cn.includes("grade 1") || cn.includes("grade 2")) {
+                teachesJunior = true;
+              } else {
+                teachesSenior = true;
+              }
+            }
+          });
+
+          if (!teachesJunior && !teachesSenior && t.specialization) {
+            const spec = t.specialization.toLowerCase();
+            if (spec.includes("montessori") || spec.includes("early") || spec.includes("ece") || spec.includes("nursery")) {
+              teachesJunior = true;
+            }
+          }
+
+          const wing = teachesJunior && teachesSenior ? "both" : teachesJunior ? "junior" : teachesSenior ? "senior" : "unassigned";
+
           return {
             id: tIdStr,
             userId: t.userId?._id?.toString() || "",
             name: t.userId?.name || "Teacher",
             email: t.userId?.email || "",
-            rawPassword: isAdmin ? (t.rawPassword || t.userId?.rawPassword || "Teacher2026!") : undefined,
             phone: t.userId?.phone || "",
             employeeId: t.employeeId,
             specialization: t.specialization,
@@ -122,6 +159,8 @@ export async function GET(req: NextRequest) {
             assignedClassIds: (t.assignedClassIds || []).map((c: any) => c._id?.toString() || c.toString()),
             assignedSubjectIds: (t.assignedSubjectIds || []).map((s: any) => s._id?.toString() || s.toString()),
             assignedClasses: (t.assignedClassIds || []).map((c: any) => `${c.name}-${c.section}`),
+            assignedClassDetails,
+            wing,
             assignedSubjects: (t.assignedSubjectIds || []).map((s: any) => s.name || "Subject"),
             assignedSubjectDetails: (t.assignedSubjectIds || []).map((s: any) => ({
               id: s._id?.toString(),
@@ -205,7 +244,6 @@ export async function POST(req: NextRequest) {
       email: email.toLowerCase().trim(),
       phone: phone ? phone.trim() : "+92 300 0000000",
       passwordHash,
-      rawPassword: password.trim(),
       role: "teacher",
       status: "active",
       customPermissions: [],
@@ -229,7 +267,6 @@ export async function POST(req: NextRequest) {
       assignedSubjectIds: Array.isArray(assignedSubjectIds) ? assignedSubjectIds : [],
       assignedClassIds: Array.isArray(assignedClassIds) ? assignedClassIds : [],
       headOfClassIds: parsedHeadIds,
-      rawPassword: password.trim(),
       joinDate: new Date(),
       status: "active",
     });
@@ -252,7 +289,6 @@ export async function POST(req: NextRequest) {
         id: newTeacher._id.toString(),
         employeeId: newTeacher.employeeId,
         name: newUser.name,
-        rawPassword: newTeacher.rawPassword,
       },
       "Faculty member onboarded and LMS account created successfully!"
     );

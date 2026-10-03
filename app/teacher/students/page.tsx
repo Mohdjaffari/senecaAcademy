@@ -160,250 +160,255 @@ export default function TeacherStudentsPage() {
   const [quickNote, setQuickNote] = useState("");
   const [savedNotes, setSavedNotes] = useState<Record<string, string>>({});
 
-  // Fetch teaching books and assemble comprehensive student records
+  // Fetch both teacher student roster and teaching books
   const fetchTeacherData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch("/api/teacher/books", { cache: "no-store" });
-      const data = await res.json();
+      const [studentsRes, booksRes] = await Promise.all([
+        fetch("/api/teacher/students", { cache: "no-store" }),
+        fetch("/api/teacher/books", { cache: "no-store" }),
+      ]);
 
-      if (data.success && data.data?.books && data.data.books.length > 0) {
-        const fetchedBooks: TeachingBook[] = data.data.books;
+      const [studentsData, booksData] = await Promise.all([
+        studentsRes.json().catch(() => ({ success: false })),
+        booksRes.json().catch(() => ({ success: false })),
+      ]);
+
+      let fetchedBooks: TeachingBook[] = [];
+      if (booksData?.success && Array.isArray(booksData.data?.books)) {
+        fetchedBooks = booksData.data.books;
         setBooks(fetchedBooks);
+      }
 
-        // Map unified students across all books
-        const studentMap = new Map<string, UnifiedStudent>();
+      // Map book academic records by studentId
+      const bookStudentMap = new Map<
+        string,
+        {
+          enrolledBooks: EnrolledBookDetail[];
+          assignments: StudentAssignmentRecord[];
+          quizzes: StudentQuizRecord[];
+          totalAssignmentsSubmitted: number;
+          totalAssignmentsCount: number;
+          totalQuizzesAttempted: number;
+          totalQuizzesCount: number;
+        }
+      >();
 
-        fetchedBooks.forEach((book) => {
-          (book.students || []).forEach((st: any) => {
-            const stId = st.studentId || st.id;
-            if (!stId) return;
+      fetchedBooks.forEach((book) => {
+        (book.students || []).forEach((st: any) => {
+          const stId = st.studentId || st.id;
+          if (!stId) return;
 
-            let existing = studentMap.get(stId);
-            if (!existing) {
-              // Calculate standing from score
-              const initialScore = st.avgScore;
-              let standing: "A*" | "A" | "B" | "C" | "Needs Attention" = "A";
-              if (initialScore === null || initialScore === undefined) {
-                standing = "A";
-              } else if (initialScore >= 90) {
-                standing = "A*";
-              } else if (initialScore >= 80) {
-                standing = "A";
-              } else if (initialScore >= 70) {
-                standing = "B";
-              } else if (initialScore >= 50) {
-                standing = "C";
-              } else {
-                standing = "Needs Attention";
-              }
+          let entry = bookStudentMap.get(stId);
+          if (!entry) {
+            entry = {
+              enrolledBooks: [],
+              assignments: [],
+              quizzes: [],
+              totalAssignmentsSubmitted: 0,
+              totalAssignmentsCount: 0,
+              totalQuizzesAttempted: 0,
+              totalQuizzesCount: 0,
+            };
+            bookStudentMap.set(stId, entry);
+          }
 
-              existing = {
-                id: stId,
-                studentId: stId,
-                userId: st.userId,
-                name: st.name || "Student",
-                rollNumber: st.rollNumber || "ROLL-001",
-                admissionNumber: st.admissionNumber || "SEN-2026",
-                className: st.className || "Grade 7 Cambridge",
-                section: st.section || "A",
-                gradeLevel: st.gradeLevel,
-                stream: st.stream || "Cambridge International",
-                gender: st.gender || "Not specified",
-                attendanceRate: st.attendanceRate || 95,
-                overallScore: st.avgScore,
-                academicStanding: standing,
-                parentName: st.guardianName || "Guardian",
-                parentPhone: st.guardianPhone || "+92 300 0000000",
-                parentEmail: st.guardianEmail || "parent@example.com",
-                guardianType: st.guardianType || "Father",
-                emergencyContact: st.emergencyContact || st.guardianPhone || "+92 300 0000000",
-                address: st.address || "Lahore, Punjab, Pakistan",
-                bloodGroup: st.bloodGroup || "O+",
-                status: st.status || "active",
-                avatarUrl: st.avatarUrl,
-                enrolledBooks: [],
-                assignments: [],
-                quizzes: [],
-                totalAssignmentsSubmitted: 0,
-                totalAssignmentsCount: 0,
-                totalQuizzesAttempted: 0,
-                totalQuizzesCount: 0,
-              };
-              studentMap.set(stId, existing);
-            }
+          if (!entry.enrolledBooks.some((b) => b.bookId === book.id)) {
+            entry.enrolledBooks.push({
+              bookId: book.id,
+              bookName: book.name,
+              bookCode: book.code,
+              submittedAssignments: st.submittedAssignments || 0,
+              totalAssignments: st.totalAssignments || 0,
+              avgScore: st.avgScore,
+              attemptedQuizzes: st.attemptedQuizzes || 0,
+              totalQuizzes: st.totalQuizzes || 0,
+              avgQuizScore: st.avgQuizScore,
+            });
+            entry.totalAssignmentsSubmitted += st.submittedAssignments || 0;
+            entry.totalAssignmentsCount += st.totalAssignments || 0;
+            entry.totalQuizzesAttempted += st.attemptedQuizzes || 0;
+            entry.totalQuizzesCount += st.totalQuizzes || 0;
+          }
+        });
 
-            // Add Book details to student's enrolled books
-            const isAlreadyEnrolled = existing.enrolledBooks.some((b) => b.bookId === book.id);
-            if (!isAlreadyEnrolled) {
-              existing.enrolledBooks.push({
-                bookId: book.id,
+        // Map Assignments for each student
+        (book.assignments || []).forEach((asgn: any) => {
+          (asgn.submissions || []).forEach((sub: any) => {
+            const subStId = sub.studentId;
+            const entry = bookStudentMap.get(subStId);
+            if (entry && !entry.assignments.some((a) => a.assignmentId === asgn.id)) {
+              entry.assignments.push({
+                assignmentId: asgn.id,
+                title: asgn.title,
                 bookName: book.name,
                 bookCode: book.code,
-                submittedAssignments: st.submittedAssignments || 0,
-                totalAssignments: st.totalAssignments || 0,
-                avgScore: st.avgScore,
-                attemptedQuizzes: st.attemptedQuizzes || 0,
-                totalQuizzes: st.totalQuizzes || 0,
-                avgQuizScore: st.avgQuizScore,
+                totalMarks: asgn.totalMarks,
+                dueDate: asgn.dueDate,
+                formattedDueDate: asgn.formattedDueDate,
+                status: sub.status === "graded" ? "graded" : "submitted",
+                obtainedMarks: sub.obtainedMarks,
+                feedback: sub.feedback,
+                submittedAt: sub.submittedAt,
+                formattedSubmittedAt: sub.formattedSubmittedAt,
               });
-              existing.totalAssignmentsSubmitted += st.submittedAssignments || 0;
-              existing.totalAssignmentsCount += st.totalAssignments || 0;
-              existing.totalQuizzesAttempted += st.attemptedQuizzes || 0;
-              existing.totalQuizzesCount += st.totalQuizzes || 0;
             }
           });
 
-          // Map Assignments for each student
-          (book.assignments || []).forEach((asgn: any) => {
-            const aId = asgn.id;
-            (asgn.submissions || []).forEach((sub: any) => {
-              const subStId = sub.studentId;
-              const studentObj = studentMap.get(subStId);
-              if (studentObj) {
-                const alreadyHas = studentObj.assignments.some((a) => a.assignmentId === aId);
-                if (!alreadyHas) {
-                  studentObj.assignments.push({
-                    assignmentId: aId,
-                    title: asgn.title,
-                    bookName: book.name,
-                    bookCode: book.code,
-                    totalMarks: asgn.totalMarks,
-                    dueDate: asgn.dueDate,
-                    formattedDueDate: asgn.formattedDueDate,
-                    status: sub.status === "graded" ? "graded" : "submitted",
-                    obtainedMarks: sub.obtainedMarks,
-                    feedback: sub.feedback,
-                    submittedAt: sub.submittedAt,
-                    formattedSubmittedAt: sub.formattedSubmittedAt,
-                  });
-                }
-              }
-            });
-
-            (asgn.unsubmittedStudents || []).forEach((unsub: any) => {
-              const unsubStId = unsub.studentId;
-              const studentObj = studentMap.get(unsubStId);
-              if (studentObj) {
-                const alreadyHas = studentObj.assignments.some((a) => a.assignmentId === aId);
-                if (!alreadyHas) {
-                  studentObj.assignments.push({
-                    assignmentId: aId,
-                    title: asgn.title,
-                    bookName: book.name,
-                    bookCode: book.code,
-                    totalMarks: asgn.totalMarks,
-                    dueDate: asgn.dueDate,
-                    formattedDueDate: asgn.formattedDueDate,
-                    status: "unsubmitted",
-                    obtainedMarks: 0,
-                  });
-                }
-              }
-            });
-          });
-
-          // Map Quizzes for each student
-          (book.quizzes || []).forEach((qz: any) => {
-            const qId = qz.id;
-            (qz.attempts || []).forEach((att: any) => {
-              const attStId = att.studentId;
-              const studentObj = studentMap.get(attStId);
-              if (studentObj) {
-                const alreadyHas = studentObj.quizzes.some((q) => q.quizId === qId);
-                if (!alreadyHas) {
-                  studentObj.quizzes.push({
-                    quizId: qId,
-                    title: qz.title,
-                    bookName: book.name,
-                    bookCode: book.code,
-                    totalMarks: qz.totalMarks,
-                    passingMarks: qz.passingMarks,
-                    status: "attempted",
-                    score: att.score,
-                    percentage: att.percentage,
-                    isPassed: att.isPassed,
-                    submittedAt: att.submittedAt,
-                    formattedSubmittedAt: att.formattedSubmittedAt,
-                  });
-                }
-              }
-            });
-
-            (qz.unattemptedStudents || []).forEach((unatt: any) => {
-              const unattStId = unatt.studentId;
-              const studentObj = studentMap.get(unattStId);
-              if (studentObj) {
-                const alreadyHas = studentObj.quizzes.some((q) => q.quizId === qId);
-                if (!alreadyHas) {
-                  studentObj.quizzes.push({
-                    quizId: qId,
-                    title: qz.title,
-                    bookName: book.name,
-                    bookCode: book.code,
-                    totalMarks: qz.totalMarks,
-                    passingMarks: qz.passingMarks,
-                    status: "unattempted",
-                    score: 0,
-                    percentage: 0,
-                    isPassed: false,
-                  });
-                }
-              }
-            });
+          (asgn.unsubmittedStudents || []).forEach((unsub: any) => {
+            const unsubStId = unsub.studentId;
+            const entry = bookStudentMap.get(unsubStId);
+            if (entry && !entry.assignments.some((a) => a.assignmentId === asgn.id)) {
+              entry.assignments.push({
+                assignmentId: asgn.id,
+                title: asgn.title,
+                bookName: book.name,
+                bookCode: book.code,
+                totalMarks: asgn.totalMarks,
+                dueDate: asgn.dueDate,
+                formattedDueDate: asgn.formattedDueDate,
+                status: "unsubmitted",
+                obtainedMarks: 0,
+              });
+            }
           });
         });
 
-        // Recompute overall weighted scores & standings
-        const unifiedList = Array.from(studentMap.values()).map((st) => {
-          let totalEarned = 0;
-          let totalMax = 0;
-
-          st.assignments.forEach((a) => {
-            if (a.status === "graded" && typeof a.obtainedMarks === "number") {
-              totalEarned += a.obtainedMarks;
-              totalMax += a.totalMarks;
+        // Map Quizzes for each student
+        (book.quizzes || []).forEach((qz: any) => {
+          (qz.attempts || []).forEach((att: any) => {
+            const attStId = att.studentId;
+            const entry = bookStudentMap.get(attStId);
+            if (entry && !entry.quizzes.some((q) => q.quizId === qz.id)) {
+              entry.quizzes.push({
+                quizId: qz.id,
+                title: qz.title,
+                bookName: book.name,
+                bookCode: book.code,
+                totalMarks: qz.totalMarks,
+                passingMarks: qz.passingMarks,
+                status: "attempted",
+                score: att.score,
+                percentage: att.percentage,
+                isPassed: att.isPassed,
+                submittedAt: att.submittedAt,
+                formattedSubmittedAt: att.formattedSubmittedAt,
+              });
             }
           });
 
-          st.quizzes.forEach((q) => {
-            if (q.status === "attempted" && typeof q.score === "number") {
-              totalEarned += q.score;
-              totalMax += q.totalMarks;
+          (qz.unattemptedStudents || []).forEach((unatt: any) => {
+            const unattStId = unatt.studentId;
+            const entry = bookStudentMap.get(unattStId);
+            if (entry && !entry.quizzes.some((q) => q.quizId === qz.id)) {
+              entry.quizzes.push({
+                quizId: qz.id,
+                title: qz.title,
+                bookName: book.name,
+                bookCode: book.code,
+                totalMarks: qz.totalMarks,
+                passingMarks: qz.passingMarks,
+                status: "unattempted",
+                score: 0,
+                percentage: 0,
+                isPassed: false,
+              });
             }
           });
+        });
+      });
 
-          const finalScore = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : st.overallScore;
+      // 1. If /api/teacher/students returned real students (including Nursery)
+      if (studentsData?.success && Array.isArray(studentsData.data?.students)) {
+        const rawList: any[] = studentsData.data.students;
 
-          let standing: "A*" | "A" | "B" | "C" | "Needs Attention" = "A";
-          if (st.attendanceRate < 80 || (finalScore !== null && finalScore < 50)) {
-            standing = "Needs Attention";
-          } else if (finalScore === null) {
-            standing = "A";
-          } else if (finalScore >= 90) {
-            standing = "A*";
-          } else if (finalScore >= 80) {
-            standing = "A";
-          } else if (finalScore >= 70) {
-            standing = "B";
-          } else {
-            standing = "C";
-          }
+        const unifiedList: UnifiedStudent[] = rawList.map((st) => {
+          const bInfo = bookStudentMap.get(st.id) || bookStudentMap.get(st.studentId);
 
           return {
-            ...st,
-            overallScore: finalScore,
-            academicStanding: standing,
+            id: st.id,
+            studentId: st.studentId || st.id,
+            userId: st.userId,
+            name: st.name || "Student",
+            rollNumber: st.rollNumber || "ROL-001",
+            admissionNumber: st.admissionNumber || "SEN-2026",
+            className: st.className || "Class",
+            section: st.section || "A",
+            gradeLevel: st.gradeLevel,
+            stream: st.stream || "General",
+            gender: st.gender || "Male",
+            attendanceRate: st.attendanceRate ?? 95,
+            overallScore: st.overallScore ?? (bInfo?.enrolledBooks?.length ? 85 : null),
+            academicStanding: st.academicStanding || "A",
+            parentName: st.parentName || "Guardian",
+            parentPhone: st.parentPhone || "+92 300 0000000",
+            parentEmail: st.parentEmail || "",
+            guardianType: st.guardianType || "Father",
+            emergencyContact: st.emergencyContact || st.parentPhone || "+92 300 0000000",
+            address: st.address || "Karachi, Pakistan",
+            bloodGroup: st.bloodGroup || "O+",
+            status: st.status || "active",
+            avatarUrl: st.avatarUrl,
+            enrolledBooks: bInfo?.enrolledBooks || [],
+            assignments: bInfo?.assignments || [],
+            quizzes: bInfo?.quizzes || [],
+            totalAssignmentsSubmitted: bInfo?.totalAssignmentsSubmitted || st.totalAssignmentsSubmitted || 0,
+            totalAssignmentsCount: bInfo?.totalAssignmentsCount || st.totalAssignmentsCount || 0,
+            totalQuizzesAttempted: bInfo?.totalQuizzesAttempted || st.totalQuizzesAttempted || 0,
+            totalQuizzesCount: bInfo?.totalQuizzesCount || st.totalQuizzesCount || 0,
           };
         });
 
         setStudents(unifiedList);
+      } else if (fetchedBooks.length > 0) {
+        // Fallback: assemble from books if student API returned empty
+        const fallbackMap = new Map<string, UnifiedStudent>();
+        fetchedBooks.forEach((book) => {
+          (book.students || []).forEach((st: any) => {
+            const stId = st.studentId || st.id;
+            if (!stId || fallbackMap.has(stId)) return;
+            fallbackMap.set(stId, {
+              id: stId,
+              studentId: stId,
+              userId: st.userId,
+              name: st.name || "Student",
+              rollNumber: st.rollNumber || "ROLL-001",
+              admissionNumber: st.admissionNumber || "SEN-2026",
+              className: st.className || "Class",
+              section: st.section || "A",
+              gradeLevel: st.gradeLevel,
+              stream: st.stream || "General",
+              gender: st.gender || "Not specified",
+              attendanceRate: st.attendanceRate || 95,
+              overallScore: st.avgScore,
+              academicStanding: "A",
+              parentName: st.guardianName || "Guardian",
+              parentPhone: st.guardianPhone || "+92 300 0000000",
+              parentEmail: st.guardianEmail || "",
+              guardianType: st.guardianType || "Father",
+              emergencyContact: st.emergencyContact || "+92 300 0000000",
+              address: st.address || "Karachi, Pakistan",
+              bloodGroup: st.bloodGroup || "O+",
+              status: st.status || "active",
+              avatarUrl: st.avatarUrl,
+              enrolledBooks: [],
+              assignments: [],
+              quizzes: [],
+              totalAssignmentsSubmitted: 0,
+              totalAssignmentsCount: 0,
+              totalQuizzesAttempted: 0,
+              totalQuizzesCount: 0,
+            });
+          });
+        });
+        setStudents(Array.from(fallbackMap.values()));
       } else {
-        // Fallback demo data if API returns empty
-        setStudents(getFallbackDemoStudents());
+        setStudents([]);
       }
     } catch (err) {
-      setStudents(getFallbackDemoStudents());
+      console.error("Failed to load teacher students data:", err);
+      toast.error("Unable to load latest students list. Please refresh the page.");
+      setStudents([]);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -413,20 +418,24 @@ export default function TeacherStudentsPage() {
     fetchTeacherData();
   }, []);
 
-  // Compute unique classes available across books
+  // Compute unique classes available across both student roster (Nursery, etc.) and books
   const uniqueClasses = useMemo(() => {
     const classMap = new Map<string, string>();
+    // 1. Add all classes from students roster
+    students.forEach((s) => {
+      if (s.className) {
+        const full = `${s.className} (${s.section || "A"})`;
+        classMap.set(full, full);
+      }
+    });
+    // 2. Add classes from books
     books.forEach((b) => {
       (b.classes || []).forEach((c) => {
-        classMap.set(c.id, c.name);
+        if (!classMap.has(c.name)) {
+          classMap.set(c.name, c.name);
+        }
       });
     });
-    // If no classes from books, extract from students
-    if (classMap.size === 0) {
-      students.forEach((s) => {
-        if (s.className) classMap.set(s.className, s.className);
-      });
-    }
     return Array.from(classMap.entries()).map(([id, name]) => ({ id, name }));
   }, [books, students]);
 
@@ -444,6 +453,7 @@ export default function TeacherStudentsPage() {
           s.parentName.toLowerCase().includes(q) ||
           s.parentPhone.includes(q) ||
           s.parentEmail.toLowerCase().includes(q) ||
+          s.className.toLowerCase().includes(q) ||
           s.enrolledBooks.some(
             (b) => b.bookName.toLowerCase().includes(q) || b.bookCode.toLowerCase().includes(q)
           );
@@ -452,11 +462,15 @@ export default function TeacherStudentsPage() {
         const matchesBook =
           selectedBook === "all" || s.enrolledBooks.some((b) => b.bookId === selectedBook);
 
-        // 3. Class Filter
+        // 3. Class Filter (matches exact class or section or name)
+        const sClassFull = `${s.className} (${s.section || "A"})`.toLowerCase();
+        const selClassLower = selectedClass.toLowerCase();
         const matchesClass =
           selectedClass === "all" ||
-          s.className.toLowerCase().includes(selectedClass.toLowerCase()) ||
-          `${s.className} (${s.section})`.toLowerCase().includes(selectedClass.toLowerCase());
+          s.className.toLowerCase() === selClassLower ||
+          sClassFull === selClassLower ||
+          s.className.toLowerCase().includes(selClassLower) ||
+          selClassLower.includes(s.className.toLowerCase());
 
         // 4. Academic Standing Filter
         const matchesStanding =
@@ -618,7 +632,9 @@ export default function TeacherStudentsPage() {
               {stats.total}
             </div>
             <span className="text-[10px] text-muted-foreground font-semibold">
-              Across {books.length || 1} Teaching Books
+              {books.length > 0
+                ? `Across ${books.length} Teaching Book${books.length > 1 ? "s" : ""}`
+                : `Across ${uniqueClasses.length || 1} Class Section${(uniqueClasses.length || 1) > 1 ? "s" : ""}`}
             </span>
           </div>
         </Card>
@@ -999,18 +1015,27 @@ export default function TeacherStudentsPage() {
                 {/* Enrolled Teaching Books Chips */}
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Studying Your Books ({s.enrolledBooks.length}):
+                    {s.enrolledBooks.length > 0
+                      ? `Studying Your Books (${s.enrolledBooks.length}):`
+                      : "Class Section:"}
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {s.enrolledBooks.map((b) => (
-                      <span
-                        key={b.bookId}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-seneca-crimson/10 text-seneca-crimson dark:text-seneca-amber-light font-bold text-[10px] border border-seneca-crimson/20"
-                      >
-                        <BookOpen className="h-2.5 w-2.5" />
-                        <span>{b.bookName}</span>
+                    {s.enrolledBooks.length > 0 ? (
+                      s.enrolledBooks.map((b) => (
+                        <span
+                          key={b.bookId}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-seneca-crimson/10 text-seneca-crimson dark:text-seneca-amber-light font-bold text-[10px] border border-seneca-crimson/20"
+                        >
+                          <BookOpen className="h-2.5 w-2.5" />
+                          <span>{b.bookName}</span>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-seneca-amber/10 text-seneca-amber-dark dark:text-seneca-amber-light font-bold text-[10px] border border-seneca-amber/20">
+                        <GraduationCap className="h-2.5 w-2.5" />
+                        <span>{s.className} ({s.section})</span>
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
 
@@ -1129,14 +1154,20 @@ export default function TeacherStudentsPage() {
                     </td>
                     <td className="p-3.5 max-w-[220px]">
                       <div className="flex flex-wrap gap-1">
-                        {s.enrolledBooks.map((b) => (
-                          <span
-                            key={b.bookId}
-                            className="inline-block px-1.5 py-0.5 rounded bg-seneca-crimson/10 text-seneca-crimson font-bold text-[10px]"
-                          >
-                            {b.bookName}
+                        {s.enrolledBooks.length > 0 ? (
+                          s.enrolledBooks.map((b) => (
+                            <span
+                              key={b.bookId}
+                              className="inline-block px-1.5 py-0.5 rounded bg-seneca-crimson/10 text-seneca-crimson font-bold text-[10px]"
+                            >
+                              {b.bookName}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-seneca-amber/10 text-seneca-amber-dark font-bold text-[10px]">
+                            {s.className} ({s.section})
                           </span>
-                        ))}
+                        )}
                       </div>
                     </td>
                     <td className="p-3.5 text-center">
@@ -1311,39 +1342,45 @@ export default function TeacherStudentsPage() {
                   <BookOpen className="h-3.5 w-3.5 text-seneca-crimson" />
                   <span>Enrolled Teaching Books & Subject Mastery</span>
                 </h5>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {activeDossier.enrolledBooks.map((b) => (
-                    <div
-                      key={b.bookId}
-                      className="p-3.5 rounded-2xl bg-card border border-border/80 shadow-sm space-y-2"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-bold text-xs text-foreground">{b.bookName}</p>
-                          <span className="text-[10px] font-mono text-muted-foreground">{b.bookCode}</span>
+                {activeDossier.enrolledBooks.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {activeDossier.enrolledBooks.map((b) => (
+                      <div
+                        key={b.bookId}
+                        className="p-3.5 rounded-2xl bg-card border border-border/80 shadow-sm space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-bold text-xs text-foreground">{b.bookName}</p>
+                            <span className="text-[10px] font-mono text-muted-foreground">{b.bookCode}</span>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] font-bold font-mono">
+                            {b.avgScore !== null ? `${b.avgScore}% Avg` : "No Grades"}
+                          </Badge>
                         </div>
-                        <Badge variant="outline" className="text-[10px] font-bold font-mono">
-                          {b.avgScore !== null ? `${b.avgScore}% Avg` : "No Grades"}
-                        </Badge>
-                      </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-border/40">
-                        <div>
-                          <span className="text-muted-foreground">Assignments:</span>
-                          <p className="font-bold text-foreground">
-                            {b.submittedAssignments} / {b.totalAssignments}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Quizzes:</span>
-                          <p className="font-bold text-foreground">
-                            {b.attemptedQuizzes} / {b.totalQuizzes}
-                          </p>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-border/40">
+                          <div>
+                            <span className="text-muted-foreground">Assignments:</span>
+                            <p className="font-bold text-foreground">
+                              {b.submittedAssignments} / {b.totalAssignments}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Quizzes:</span>
+                            <p className="font-bold text-foreground">
+                              {b.attemptedQuizzes} / {b.totalQuizzes}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-border/40 text-center text-xs text-muted-foreground">
+                    Enrolled via Homeroom Class Section {activeDossier.className} ({activeDossier.section}). No individual textbook curriculum subjects assigned.
+                  </div>
+                )}
               </div>
 
               {/* 3. Coursework & Assignment Submissions Log */}
@@ -1572,256 +1609,4 @@ export default function TeacherStudentsPage() {
       )}
     </div>
   );
-}
-
-// Fallback Mock Data in case of network/database disconnect
-function getFallbackDemoStudents(): UnifiedStudent[] {
-  return [
-    {
-      id: "std-1",
-      studentId: "std-1",
-      name: "Ayan Tariq",
-      rollNumber: "ROLL-07-01",
-      admissionNumber: "SNC-2026-081",
-      className: "Grade 7 Cambridge",
-      section: "A",
-      gradeLevel: 7,
-      stream: "Cambridge International",
-      gender: "Male",
-      attendanceRate: 97,
-      overallScore: 94,
-      academicStanding: "A*",
-      parentName: "Tariq Mahmood",
-      parentPhone: "+92 300 1234567",
-      parentEmail: "tariq.mahmood@example.com",
-      guardianType: "Father",
-      emergencyContact: "+92 300 1234567",
-      address: "House 14-B, Model Town, Lahore",
-      bloodGroup: "B+",
-      status: "active",
-      enrolledBooks: [
-        {
-          bookId: "b-1",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          submittedAssignments: 3,
-          totalAssignments: 3,
-          avgScore: 95,
-          attemptedQuizzes: 2,
-          totalQuizzes: 2,
-          avgQuizScore: 92,
-        },
-      ],
-      assignments: [
-        {
-          assignmentId: "asg-1",
-          title: "Kinematics Numerical Set 1",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          totalMarks: 25,
-          dueDate: "2026-09-10",
-          formattedDueDate: "Sep 10, 2026",
-          status: "graded",
-          obtainedMarks: 24,
-          feedback: "Excellent precision on vector diagrams.",
-        },
-      ],
-      quizzes: [
-        {
-          quizId: "qz-1",
-          title: "Mechanics Motion Quiz",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          totalMarks: 20,
-          passingMarks: 10,
-          status: "attempted",
-          score: 19,
-          percentage: 95,
-          isPassed: true,
-        },
-      ],
-      totalAssignmentsSubmitted: 3,
-      totalAssignmentsCount: 3,
-      totalQuizzesAttempted: 2,
-      totalQuizzesCount: 2,
-    },
-    {
-      id: "std-2",
-      studentId: "std-2",
-      name: "Zainab Fatima",
-      rollNumber: "ROLL-07-02",
-      admissionNumber: "SNC-2026-082",
-      className: "Grade 7 Cambridge",
-      section: "A",
-      gradeLevel: 7,
-      stream: "Cambridge International",
-      gender: "Female",
-      attendanceRate: 99,
-      overallScore: 98,
-      academicStanding: "A*",
-      parentName: "Dr. Farhan Ali",
-      parentPhone: "+92 321 9876543",
-      parentEmail: "farhan.ali@example.com",
-      guardianType: "Father",
-      emergencyContact: "+92 321 9876543",
-      address: "Gulberg III, Lahore",
-      bloodGroup: "O+",
-      status: "active",
-      enrolledBooks: [
-        {
-          bookId: "b-1",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          submittedAssignments: 3,
-          totalAssignments: 3,
-          avgScore: 98,
-          attemptedQuizzes: 2,
-          totalQuizzes: 2,
-          avgQuizScore: 100,
-        },
-      ],
-      assignments: [
-        {
-          assignmentId: "asg-1",
-          title: "Kinematics Numerical Set 1",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          totalMarks: 25,
-          dueDate: "2026-09-10",
-          formattedDueDate: "Sep 10, 2026",
-          status: "graded",
-          obtainedMarks: 25,
-          feedback: "Outstanding work.",
-        },
-      ],
-      quizzes: [
-        {
-          quizId: "qz-1",
-          title: "Mechanics Motion Quiz",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          totalMarks: 20,
-          passingMarks: 10,
-          status: "attempted",
-          score: 20,
-          percentage: 100,
-          isPassed: true,
-        },
-      ],
-      totalAssignmentsSubmitted: 3,
-      totalAssignmentsCount: 3,
-      totalQuizzesAttempted: 2,
-      totalQuizzesCount: 2,
-    },
-    {
-      id: "std-3",
-      studentId: "std-3",
-      name: "Mustafa Bilal",
-      rollNumber: "ROLL-07-03",
-      admissionNumber: "SNC-2026-083",
-      className: "Grade 7 Cambridge",
-      section: "A",
-      gradeLevel: 7,
-      stream: "Cambridge International",
-      gender: "Male",
-      attendanceRate: 85,
-      overallScore: 72,
-      academicStanding: "B",
-      parentName: "Bilal Zubair",
-      parentPhone: "+92 333 4567890",
-      parentEmail: "bilal.z@example.com",
-      guardianType: "Father",
-      emergencyContact: "+92 333 4567890",
-      address: "DHA Phase 5, Lahore",
-      bloodGroup: "A+",
-      status: "active",
-      enrolledBooks: [
-        {
-          bookId: "b-1",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          submittedAssignments: 2,
-          totalAssignments: 3,
-          avgScore: 72,
-          attemptedQuizzes: 1,
-          totalQuizzes: 2,
-          avgQuizScore: 70,
-        },
-      ],
-      assignments: [
-        {
-          assignmentId: "asg-1",
-          title: "Kinematics Numerical Set 1",
-          bookName: "Physics - Mechanics & Dynamics",
-          bookCode: "PHY-701",
-          totalMarks: 25,
-          dueDate: "2026-09-10",
-          formattedDueDate: "Sep 10, 2026",
-          status: "graded",
-          obtainedMarks: 18,
-          feedback: "Check acceleration calculation step 3.",
-        },
-      ],
-      quizzes: [],
-      totalAssignmentsSubmitted: 2,
-      totalAssignmentsCount: 3,
-      totalQuizzesAttempted: 1,
-      totalQuizzesCount: 2,
-    },
-    {
-      id: "std-4",
-      studentId: "std-4",
-      name: "Hamza Naveed",
-      rollNumber: "ROLL-08-02",
-      admissionNumber: "SNC-2026-085",
-      className: "Grade 8 Cambridge",
-      section: "B",
-      gradeLevel: 8,
-      stream: "Cambridge International",
-      gender: "Male",
-      attendanceRate: 74,
-      overallScore: 48,
-      academicStanding: "Needs Attention",
-      parentName: "Naveed Akram",
-      parentPhone: "+92 312 3334455",
-      parentEmail: "naveed.akram@example.com",
-      guardianType: "Father",
-      emergencyContact: "+92 312 3334455",
-      address: "Johar Town, Lahore",
-      bloodGroup: "AB+",
-      status: "probation",
-      enrolledBooks: [
-        {
-          bookId: "b-2",
-          bookName: "Advanced Mathematics",
-          bookCode: "MATH-802",
-          submittedAssignments: 1,
-          totalAssignments: 3,
-          avgScore: 48,
-          attemptedQuizzes: 0,
-          totalQuizzes: 2,
-          avgQuizScore: null,
-        },
-      ],
-      assignments: [
-        {
-          assignmentId: "asg-2",
-          title: "Algebraic Factorization",
-          bookName: "Advanced Mathematics",
-          bookCode: "MATH-802",
-          totalMarks: 25,
-          dueDate: "2026-09-08",
-          formattedDueDate: "Sep 8, 2026",
-          status: "graded",
-          obtainedMarks: 12,
-          feedback: "Requires extra remedial practice in quadratics.",
-        },
-      ],
-      quizzes: [],
-      totalAssignmentsSubmitted: 1,
-      totalAssignmentsCount: 3,
-      totalQuizzesAttempted: 0,
-      totalQuizzesCount: 2,
-    },
-  ];
 }

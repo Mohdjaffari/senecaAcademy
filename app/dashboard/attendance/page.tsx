@@ -53,6 +53,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ACADEMIC_SPECTRUM } from "@/lib/constants/academic-spectrum";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
+import { resolveClassWing, isJuniorGrade, isSeniorGrade } from "@/lib/constants/campus-wing";
 
 interface AttendanceRecord {
   id: string;
@@ -117,6 +119,7 @@ const getYesterdayDateString = () => {
 };
 
 export default function PrincipalAttendancePage() {
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [sessions, setSessions] = useState<AttendanceRecord[]>([]);
   const [classesList, setClassesList] = useState<ClassOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -313,6 +316,12 @@ export default function PrincipalAttendancePage() {
   // Filtered Sessions for Ledger Table & Search
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
+      // Campus portal wing filter
+      if (activeWing !== "all") {
+        const wing = resolveClassWing(undefined, s.classInfo.name);
+        if (wing !== activeWing) return false;
+      }
+
       const matchesSearch =
         s.classInfo.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.teacher.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -323,11 +332,17 @@ export default function PrincipalAttendancePage() {
 
       return matchesSearch && matchesWing;
     });
-  }, [sessions, searchQuery, selectedWingFilter]);
+  }, [sessions, searchQuery, selectedWingFilter, activeWing]);
 
   // Filtered Classes for Radar Grid
   const filteredClassesForRadar = useMemo(() => {
     return classesList.filter((c) => {
+      // Campus portal wing filter
+      if (activeWing !== "all") {
+        const wing = resolveClassWing(c.gradeLevel, c.name);
+        if (wing !== activeWing) return false;
+      }
+
       const matchesSearch =
         c.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (c.classTeacher?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -339,7 +354,7 @@ export default function PrincipalAttendancePage() {
 
       return matchesSearch && matchesClass && matchesWing;
     });
-  }, [classesList, searchQuery, selectedClassFilter, selectedWingFilter]);
+  }, [classesList, searchQuery, selectedClassFilter, selectedWingFilter, activeWing]);
 
   // Export CSV
   const handleExportCSV = () => {
@@ -403,7 +418,16 @@ export default function PrincipalAttendancePage() {
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in-50 duration-300 w-full overflow-x-hidden pb-12">
       {/* 1. Header & Hero Metric Banner */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 bg-gradient-to-r from-seneca-crimson via-seneca-crimson-dark to-zinc-950 p-4 sm:p-7 text-white shadow-2xl">
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 p-4 sm:p-7 text-white shadow-2xl transition-all duration-300",
+          activeWing === "junior"
+            ? "seneca-junior-hero-gradient"
+            : activeWing === "senior"
+            ? "seneca-senior-hero-gradient"
+            : "seneca-hero-gradient"
+        )}
+      >
         <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-seneca-amber/20 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
@@ -411,7 +435,7 @@ export default function PrincipalAttendancePage() {
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-seneca-amber-light border border-white/10">
                 <CalendarCheck className="h-3 w-3" />
-                <span>Executive Attendance Oversight</span>
+                <span>{wingConfig.name}</span>
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] sm:text-[11px] font-bold border border-emerald-500/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -426,7 +450,11 @@ export default function PrincipalAttendancePage() {
               Class Attendance <span className="text-seneca-amber">Progress Radar</span>
             </h1>
             <p className="text-xs sm:text-sm text-white/80 max-w-2xl leading-relaxed">
-              Supervise classroom attendance submission progress, inspect individual section rolls, review punctuality rates, and audit absentees across all educational wings (Playgroup through 2nd Year).
+              {activeWing === "junior"
+                ? "Supervise Early Childhood and Primary attendance submission progress, inspect foundational classroom rolls, and dispatch parent absence notifications."
+                : activeWing === "senior"
+                ? "Oversee Middle, Secondary (Matric/Cambridge), and Intermediate attendance compliance, punctuality analytics, and subject-level rosters."
+                : "Supervise classroom attendance submission progress, inspect individual section rolls, review punctuality rates, and audit absentees across all educational wings (Playgroup through 2nd Year)."}
             </p>
           </div>
 
@@ -617,7 +645,49 @@ export default function PrincipalAttendancePage() {
         </div>
       </Card>
 
-      {/* 4. Controls, Date Presets & Filter Toolbar */}
+      {/* 4. Campus Wing Quick Filters & Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-muted/70 border border-border/80 w-fit">
+        <button
+          type="button"
+          onClick={() => setCampusWing("all")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all",
+            activeWing === "all"
+              ? "bg-card text-foreground shadow-sm border border-border/80"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          All Wings ({classesList.length} Classes)
+        </button>
+        <button
+          type="button"
+          onClick={() => setCampusWing("junior")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5",
+            activeWing === "junior"
+              ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 shadow-sm border border-amber-500/30"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+          Junior Wing (&le; Gr 2) ({classesList.filter((c) => resolveClassWing(c.gradeLevel, c.name) === "junior").length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCampusWing("senior")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5",
+            activeWing === "senior"
+              ? "bg-seneca-crimson/15 text-seneca-crimson dark:text-seneca-amber-light shadow-sm border border-seneca-crimson/30"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <GraduationCap className="h-3 w-3 text-seneca-crimson" />
+          Senior Wing (&gt; Gr 2) ({classesList.filter((c) => resolveClassWing(c.gradeLevel, c.name) === "senior").length})
+        </button>
+      </div>
+
+      {/* Controls, Date Presets & Filter Toolbar */}
       <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-md rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
           {/* Search input */}

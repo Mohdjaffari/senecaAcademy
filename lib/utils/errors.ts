@@ -80,3 +80,10 @@ export class RateLimitError extends AppError {
     this.name = "RateLimitError";
   }
 }
+
+export class DatabaseError extends AppError {
+  constructor(message = "Database connection or query error.", details?: unknown) {
+    super(message, "DATABASE_ERROR", 503, details);
+    this.name = "DatabaseError";
+  }
+}

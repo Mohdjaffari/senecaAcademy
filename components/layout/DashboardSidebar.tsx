@@ -39,8 +39,10 @@ import {
   PhoneCall,
   MessageSquareQuote,
   Star,
+  Sparkles,
 } from "lucide-react";
 import { UserRole } from "@/lib/auth/permissions";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { LogoutConfirmDialog } from "@/components/layout/LogoutConfirmDialog";
@@ -75,6 +77,7 @@ interface DashboardSidebarProps {
 
 export function DashboardSidebar({ role, userName, userEmail, avatarUrl, isClassTeacher = false }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentAvatar, setCurrentAvatar] = useState<string | undefined>(avatarUrl);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
@@ -116,72 +119,88 @@ export function DashboardSidebar({ role, userName, userEmail, avatarUrl, isClass
 
   const getNavSections = (): NavSection[] => {
     if (role === "super_admin" || role === "principal") {
+      const isJuniorMode = pathname.startsWith("/junior-portal") || activeWing === "junior";
+      const isSeniorMode = pathname.startsWith("/senior-portal") || activeWing === "senior";
+      const wingQuery = isJuniorMode ? "?wing=junior" : isSeniorMode ? "?wing=senior" : "";
+
+      const overviewHref = isJuniorMode
+        ? "/junior-portal"
+        : isSeniorMode
+        ? "/senior-portal"
+        : "/dashboard";
+
+      const overviewTitle = isJuniorMode
+        ? "Junior Wing Overview"
+        : isSeniorMode
+        ? "Senior Wing Overview"
+        : "Overview";
+
       return [
         {
           items: [
             {
-              title: "Overview",
-              href: "/dashboard",
+              title: overviewTitle,
+              href: overviewHref,
               icon: <LayoutDashboard className="h-4 w-4" />,
             },
           ],
         },
         {
-          heading: "Academic Management",
+          heading: isJuniorMode ? "Junior Academics (≤ Gr 2)" : isSeniorMode ? "Senior Academics (> Gr 2)" : "Academic Management",
           items: [
             {
-              title: "Students",
-              href: "/dashboard/students",
+              title: isJuniorMode ? "Students (≤ Gr 2)" : isSeniorMode ? "Students (> Gr 2)" : "Students",
+              href: `/dashboard/students${wingQuery}`,
               icon: <GraduationCap className="h-4 w-4" />,
             },
             {
-              title: "Teachers",
-              href: "/dashboard/teachers",
+              title: isJuniorMode ? "Teachers (≤ Gr 2)" : isSeniorMode ? "Teachers (> Gr 2)" : "Teachers",
+              href: `/dashboard/teachers${wingQuery}`,
               icon: <Users className="h-4 w-4" />,
             },
             {
-              title: "Classes & Sections",
-              href: "/dashboard/classes",
+              title: isJuniorMode ? "Classes & Sections (≤ Gr 2)" : isSeniorMode ? "Classes & Sections (> Gr 2)" : "Classes & Sections",
+              href: `/dashboard/classes${wingQuery}`,
               icon: <Layers className="h-4 w-4" />,
             },
             {
-              title: "Subjects",
-              href: "/dashboard/subjects",
+              title: isJuniorMode ? "Subjects (≤ Gr 2)" : isSeniorMode ? "Subjects (> Gr 2)" : "Subjects",
+              href: `/dashboard/subjects${wingQuery}`,
               icon: <BookOpen className="h-4 w-4" />,
             },
             {
               title: "Teaching Timetables",
-              href: "/dashboard/timetable",
+              href: `/dashboard/timetable${wingQuery}`,
               icon: <Clock className="h-4 w-4" />,
             },
             {
               title: "School Calendar & Leaves",
-              href: "/dashboard/calendar",
+              href: `/dashboard/calendar${wingQuery}`,
               icon: <Calendar className="h-4 w-4" />,
             },
           ],
         },
         {
-          heading: "Operations & Administration",
+          heading: isJuniorMode ? "Junior Operations" : isSeniorMode ? "Senior Operations" : "Operations & Administration",
           items: [
             {
-              title: "Attendance",
-              href: "/dashboard/attendance",
+              title: isJuniorMode ? "Attendance (≤ Gr 2)" : isSeniorMode ? "Attendance (> Gr 2)" : "Attendance",
+              href: `/dashboard/attendance${wingQuery}`,
               icon: <CalendarCheck className="h-4 w-4" />,
             },
             {
               title: "Exams & Results",
-              href: "/dashboard/results",
+              href: `/dashboard/results${wingQuery}`,
               icon: <Award className="h-4 w-4" />,
             },
             {
-              title: "Fee Management",
-              href: "/dashboard/fees",
+              title: isJuniorMode ? "Fee Ledger (≤ Gr 2)" : isSeniorMode ? "Fee Ledger (> Gr 2)" : "Fee Management",
+              href: `/dashboard/fees${wingQuery}`,
               icon: <CreditCard className="h-4 w-4" />,
             },
             {
-              title: "Admissions",
-              href: "/dashboard/admissions",
+              title: isJuniorMode ? "Admissions (≤ Gr 2)" : isSeniorMode ? "Admissions (> Gr 2)" : "Admissions",
+              href: `/dashboard/admissions${wingQuery}`,
               icon: <UserPlus className="h-4 w-4" />,
             },
             {
@@ -491,8 +510,21 @@ export function DashboardSidebar({ role, userName, userEmail, avatarUrl, isClass
         <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
           Workspace
         </span>
-        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-seneca-crimson text-white tracking-wide uppercase">
-          {role.replace("_", " ")}
+        <span
+          className={cn(
+            "text-[10px] font-extrabold px-2 py-0.5 rounded-full tracking-wide uppercase",
+            activeWing === "junior" && (role === "super_admin" || role === "principal")
+              ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+              : activeWing === "senior" && (role === "super_admin" || role === "principal")
+              ? "bg-seneca-crimson text-white shadow-xs"
+              : "bg-seneca-crimson text-white"
+          )}
+        >
+          {activeWing === "junior" && (role === "super_admin" || role === "principal")
+            ? "Junior Principal (≤ Gr 2)"
+            : activeWing === "senior" && (role === "super_admin" || role === "principal")
+            ? "Senior Principal (> Gr 2)"
+            : role.replace("_", " ")}
         </span>
       </div>
 
@@ -513,13 +545,17 @@ export function DashboardSidebar({ role, userName, userEmail, avatarUrl, isClass
                   item.subItems?.some(
                     (sub) => pathname === sub.href || pathname?.startsWith(sub.href)
                   );
+                const itemPath = item.href.split("?")[0];
                 const isDirectActive =
                   pathname === item.href ||
+                  pathname === itemPath ||
                   (!hasSubItems &&
-                    item.href !== "/dashboard" &&
-                    item.href !== "/teacher" &&
-                    item.href !== "/student" &&
-                    pathname?.startsWith(item.href));
+                    itemPath !== "/dashboard" &&
+                    itemPath !== "/junior-portal" &&
+                    itemPath !== "/senior-portal" &&
+                    itemPath !== "/teacher" &&
+                    itemPath !== "/student" &&
+                    pathname?.startsWith(itemPath));
                 const isDropdownOpen =
                   openDropdowns[item.href] ?? (isAnySubActive || false);
 

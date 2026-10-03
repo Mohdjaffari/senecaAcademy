@@ -97,6 +97,9 @@ import {
   AcademicGrade,
 } from "@/lib/constants/academic-spectrum";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import CsvImportModal from "@/components/dashboard/CsvImportModal";
+import { STUDENT_IMPORT_COLUMNS, STUDENT_SAMPLE_DATA } from "@/lib/utils/csv-helper";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
 
 export interface FeeVoucher {
   id: string;
@@ -507,7 +510,9 @@ export default function PrincipalStudentsPage() {
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingClasses, setLoadingClasses] = useState(false);
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedWingFilter, setSelectedWingFilter] = useState<"all" | "junior" | "senior">("all");
   const [selectedGrade, setSelectedGrade] = useState("all");
   const [selectedSection, setSelectedSection] = useState("all");
   const [selectedDepartment, setSelectedDepartment] = useState("all");
@@ -515,8 +520,15 @@ export default function PrincipalStudentsPage() {
   const [selectedAdmissionType, setSelectedAdmissionType] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
-  // Modal States
+  // Keep student list in sync with global campus portal
+  useEffect(() => {
+    if (activeWing) {
+      setSelectedWingFilter(activeWing);
+    }
+  }, [activeWing]);
+
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
+  const [importCsvModalOpen, setImportCsvModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<StudentData | null>(null);
   const [previewDocModal, setPreviewDocModal] = useState<{ url: string; title: string } | null>(null);
@@ -1510,6 +1522,36 @@ export default function PrincipalStudentsPage() {
   }, []);
 
   // Filter students
+  const isStudentJunior = (std: StudentData) => {
+    if (typeof std.gradeLevel === "number") return std.gradeLevel <= 2;
+    const cn = (std.className || std.gradeName || "").toLowerCase();
+    return (
+      cn.includes("playgroup") ||
+      cn.includes("nursery") ||
+      cn.includes("prep") ||
+      cn.includes("kg") ||
+      cn.includes("grade 1") ||
+      cn.includes("grade 2") ||
+      cn.includes("class 1") ||
+      cn.includes("class 2")
+    );
+  };
+
+  const isStudentSenior = (std: StudentData) => {
+    if (typeof std.gradeLevel === "number") return std.gradeLevel > 2;
+    const cn = (std.className || std.gradeName || "").toLowerCase();
+    return (
+      !cn.includes("playgroup") &&
+      !cn.includes("nursery") &&
+      !cn.includes("prep") &&
+      !cn.includes("kg") &&
+      !cn.includes("grade 1") &&
+      !cn.includes("grade 2") &&
+      !cn.includes("class 1") &&
+      !cn.includes("class 2")
+    );
+  };
+
   const filteredStudents = students.filter((std) => {
     const matchesSearch =
       std.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1539,13 +1581,19 @@ export default function PrincipalStudentsPage() {
     const matchesAdmissionType =
       selectedAdmissionType === "all" || std.admissionType === selectedAdmissionType;
 
+    const matchesWing =
+      selectedWingFilter === "all" ||
+      (selectedWingFilter === "junior" && isStudentJunior(std)) ||
+      (selectedWingFilter === "senior" && isStudentSenior(std));
+
     return (
       matchesSearch &&
       matchesGrade &&
       matchesSection &&
       matchesDepartment &&
       matchesStatus &&
-      matchesAdmissionType
+      matchesAdmissionType &&
+      matchesWing
     );
   });
 
@@ -1555,6 +1603,8 @@ export default function PrincipalStudentsPage() {
   const boysCount = students.filter((s) => s.gender === "Male").length;
   const girlsCount = students.filter((s) => s.gender === "Female").length;
   const verifiedDocsCount = students.filter((s) => s.documents?.verificationStatus === "verified").length;
+  const juniorStudentsCount = students.filter(isStudentJunior).length;
+  const seniorStudentsCount = students.filter(isStudentSenior).length;
 
   // Enrollment Form Submit Handler
   const handleEnrollSubmit = async (e: React.FormEvent) => {
@@ -1877,14 +1927,16 @@ export default function PrincipalStudentsPage() {
       `"${s.status}"`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((e) => e.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `Seneca_Students_Roster_${new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     toast.success("Comprehensive Student Directory exported to CSV!");
   };
 
@@ -1916,7 +1968,7 @@ export default function PrincipalStudentsPage() {
           </div>
 
           {/* Action Buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <Button
               onClick={handleExportCSV}
               variant="outline"
@@ -1925,6 +1977,15 @@ export default function PrincipalStudentsPage() {
             >
               <Download className="h-3.5 w-3.5 mr-1.5" />
               <span>Export Roster (CSV)</span>
+            </Button>
+            <Button
+              onClick={() => setImportCsvModalOpen(true)}
+              variant="outline"
+              size="sm"
+              className="rounded-xl font-bold text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm w-full sm:w-auto justify-center gap-1.5"
+            >
+              <Upload className="h-3.5 w-3.5 text-seneca-amber" />
+              <span>Import CSV</span>
             </Button>
             <Button
               onClick={handleOpenEnrollModal}
@@ -2020,8 +2081,106 @@ export default function PrincipalStudentsPage() {
         </Card>
       </div>
 
-      {/* 3. Search & Comprehensive Multi-Filter Bar */}
+      {/* 3. Search & Comprehensive Multi-Filter Bar with Campus Wing Control */}
       <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-xl rounded-2xl p-3 sm:p-5 space-y-3.5">
+        {/* Campus Wing Scope */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-border/60">
+          {activeWing === "junior" ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300">
+              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-xs font-extrabold uppercase tracking-wide">
+                Junior Wing Student Roster (≤ Grade 2)
+              </span>
+              <Badge className="bg-amber-500 text-white text-[10px] font-black ml-1">
+                {juniorStudentsCount} Early Learners Enrolled
+              </Badge>
+            </div>
+          ) : activeWing === "senior" ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-seneca-crimson/15 border border-seneca-crimson/30 text-seneca-crimson dark:text-seneca-amber-light">
+              <GraduationCap className="h-4 w-4 text-seneca-crimson" />
+              <span className="text-xs font-extrabold uppercase tracking-wide">
+                Senior Wing Student Roster (&gt; Grade 2)
+              </span>
+              <Badge className="bg-seneca-crimson text-white text-[10px] font-black ml-1">
+                {seniorStudentsCount} Senior Students Enrolled
+              </Badge>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-muted/60 border border-border/70">
+              <button
+                type="button"
+                onClick={() => setSelectedWingFilter("all")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                  selectedWingFilter === "all"
+                    ? "bg-background text-foreground shadow-xs border border-border/60"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span>All Students</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-muted text-[10px] font-extrabold">{totalStudents}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedWingFilter("junior")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                  selectedWingFilter === "junior"
+                    ? "bg-amber-500 text-white shadow-md shadow-amber-500/20 font-black"
+                    : "text-muted-foreground hover:text-amber-600"
+                )}
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>Junior Campus (≤ Gr 2)</span>
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-md text-[10px] font-extrabold",
+                    selectedWingFilter === "junior" ? "bg-white/20 text-white" : "bg-muted"
+                  )}
+                >
+                  {juniorStudentsCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedWingFilter("senior")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                  selectedWingFilter === "senior"
+                    ? "bg-seneca-crimson text-white shadow-md shadow-seneca-crimson/20 font-black"
+                    : "text-muted-foreground hover:text-seneca-crimson"
+                )}
+              >
+                <GraduationCap className="h-3 w-3" />
+                <span>Senior Campus (&gt; Gr 2)</span>
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-md text-[10px] font-extrabold",
+                    selectedWingFilter === "senior" ? "bg-white/20 text-white" : "bg-muted"
+                  )}
+                >
+                  {seniorStudentsCount}
+                </span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">
+              Campus Scope:{" "}
+              <strong className="text-foreground">
+                {activeWing === "junior" || selectedWingFilter === "junior"
+                  ? "Playgroup, Nursery, Prep/KG, Grade 1 & 2"
+                  : activeWing === "senior" || selectedWingFilter === "senior"
+                  ? "Grades 3 through 12 / College"
+                  : "Consolidated Dual-Campus"}
+              </strong>
+            </span>
+          </div>
+        </div>
+
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* Search Input */}
           <div className="relative flex-1 min-w-0">
@@ -5951,6 +6110,21 @@ export default function PrincipalStudentsPage() {
         variant="destructive"
         icon="trash"
         onConfirm={handleConfirmDeleteStudent}
+      />
+
+      {/* Bulk CSV Import Modal */}
+      <CsvImportModal
+        isOpen={importCsvModalOpen}
+        onClose={() => setImportCsvModalOpen(false)}
+        title="Bulk Student Admission & Enrollment"
+        description="Upload a CSV spreadsheet to bulk enroll students across all grades. Class sections will be linked or auto-created, and portal login credentials will be securely provisioned."
+        badgeLabel="Student Bulk Import"
+        templateFilename="Seneca_Students_Import_Template"
+        columns={STUDENT_IMPORT_COLUMNS}
+        sampleData={STUDENT_SAMPLE_DATA}
+        apiEndpoint="/api/students/import"
+        onSuccess={() => fetchStudents()}
+        entityNamePlural="students"
       />
     </div>
   );

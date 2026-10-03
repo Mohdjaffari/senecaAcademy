@@ -56,6 +56,7 @@ import {
   Palette,
   FlaskConical,
   Laptop,
+  Upload,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,10 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import CsvImportModal from "@/components/dashboard/CsvImportModal";
+import { SUBJECT_IMPORT_COLUMNS, SUBJECT_SAMPLE_DATA } from "@/lib/utils/csv-helper";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
+import { isJuniorGrade, isSeniorGrade } from "@/lib/constants/campus-wing";
 
 interface AssignedClassDetail {
   id: string;
@@ -199,6 +204,7 @@ const getDisciplineIcon = (name: string, dept: string) => {
 };
 
 export default function PrincipalSubjectsPage() {
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [activeTab, setActiveTab] = useState<"catalog" | "matrix" | "departments">("catalog");
   const [subjects, setSubjects] = useState<SubjectData[]>([]);
   const [departmentsList, setDepartmentsList] = useState<DepartmentOption[]>([]);
@@ -212,6 +218,7 @@ export default function PrincipalSubjectsPage() {
 
   // Modal States (Supports both Create and Edit)
   const [modalOpen, setModalOpen] = useState(false);
+  const [importCsvModalOpen, setImportCsvModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<SubjectData | null>(null);
@@ -378,6 +385,26 @@ export default function PrincipalSubjectsPage() {
   // Filter subjects for display
   const filteredSubjects = useMemo(() => {
     return subjects.filter((sub) => {
+      // Campus portal wing filter
+      if (activeWing === "junior") {
+        const hasJuniorClass =
+          (sub.assignedClasses || []).some((c) => isJuniorGrade(c.gradeLevel)) ||
+          (sub.offeringClasses || []).some((c) => /playgroup|nursery|kg|prep|grade 1|grade 2/i.test(c));
+        const hasSeniorClass =
+          (sub.assignedClasses || []).some((c) => isSeniorGrade(c.gradeLevel)) ||
+          (sub.offeringClasses || []).some((c) => /grade [3-9]|grade 1[0-2]|matric|fsc|ics|o-level|a-level|1st year|2nd year/i.test(c));
+        if (!hasJuniorClass && hasSeniorClass) return false;
+      }
+      if (activeWing === "senior") {
+        const hasJuniorClass =
+          (sub.assignedClasses || []).some((c) => isJuniorGrade(c.gradeLevel)) ||
+          (sub.offeringClasses || []).some((c) => /playgroup|nursery|kg|prep|grade 1|grade 2/i.test(c));
+        const hasSeniorClass =
+          (sub.assignedClasses || []).some((c) => isSeniorGrade(c.gradeLevel)) ||
+          (sub.offeringClasses || []).some((c) => /grade [3-9]|grade 1[0-2]|matric|fsc|ics|o-level|a-level|1st year|2nd year/i.test(c));
+        if (hasJuniorClass && !hasSeniorClass) return false;
+      }
+
       const matchesSearch =
         sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sub.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -404,7 +431,7 @@ export default function PrincipalSubjectsPage() {
 
       return matchesSearch && matchesDept && matchesWing && matchesCredit;
     });
-  }, [subjects, searchQuery, selectedDept, selectedWingFilter, selectedCreditFilter]);
+  }, [subjects, searchQuery, selectedDept, selectedWingFilter, selectedCreditFilter, activeWing]);
 
   // Summary Metrics
   const totalSubjects = subjects.length;
@@ -547,65 +574,87 @@ export default function PrincipalSubjectsPage() {
 
   return (
     <div className="space-y-5 sm:space-y-7 animate-in fade-in-50 duration-300 w-full overflow-x-hidden pb-12">
-      {/* 1. Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border/80 pb-5">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold text-seneca-crimson uppercase tracking-wider bg-seneca-crimson/10 px-2.5 py-0.5 rounded-full border border-seneca-crimson/20 flex items-center gap-1.5 shadow-2xs">
-              <BookOpen className="h-3.5 w-3.5 text-seneca-crimson" />
-              <span>Curriculum & Syllabus Desk</span>
-            </span>
-            {departmentsList.length > 0 && (
-              <span className="text-[10px] font-bold text-muted-foreground bg-muted/60 px-2.5 py-0.5 rounded-full border border-border flex items-center gap-1">
-                <Building className="h-3 w-3 text-emerald-500" />
-                <span>{departmentsList.length} Live Academic Depts</span>
-              </span>
-            )}
-            <span className="text-[10px] font-bold text-muted-foreground bg-muted/60 px-2.5 py-0.5 rounded-full border border-border flex items-center gap-1">
-              <GraduationCap className="h-3 w-3 text-purple-500" />
-              <span>Playgroup &rarr; 2nd Year College</span>
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight font-heading text-foreground">
-            Academic Subjects & Curriculum
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl leading-relaxed">
-            Manage course catalog across all educational tiers, allocate weekly credit hours, link syllabus to class sections, and coordinate specialist faculty.
-          </p>
-        </div>
+      {/* 1. Header & Hero Metric Banner */}
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 p-4 sm:p-8 text-white shadow-2xl transition-all duration-300",
+          activeWing === "junior"
+            ? "seneca-junior-hero-gradient"
+            : activeWing === "senior"
+            ? "seneca-senior-hero-gradient"
+            : "seneca-hero-gradient"
+        )}
+      >
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-seneca-amber/20 blur-3xl pointer-events-none" />
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-          <Link href="/dashboard/classes">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
+          <div className="space-y-1.5 sm:space-y-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-seneca-amber-light border border-white/10">
+                <BookOpen className="h-3 w-3" />
+                <span>{wingConfig.name}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] sm:text-[11px] font-bold border border-emerald-500/30">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Session 2026–27 Active Syllabus</span>
+              </span>
+            </div>
+
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold font-heading tracking-tight text-white leading-tight">
+              Academic Subjects & <span className="text-seneca-amber">Curriculum Syllabus</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-white/80 max-w-2xl leading-relaxed">
+              {activeWing === "junior"
+                ? "Manage foundational Early Years and Lower Primary subjects (Phonics, English, Basic Numeracy, Early Arts & General Knowledge), credit periods, and teacher assignments."
+                : activeWing === "senior"
+                ? "Oversee Middle, Secondary (Matric/Cambridge), and College intermediate academic syllabi, STEM labs, Cambridge O/A Levels, and specialist faculty allocations."
+                : "Manage course catalog across all educational tiers, allocate weekly credit hours, link syllabus to class sections, and coordinate specialist faculty."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <Link href="/dashboard/classes">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl text-xs font-bold gap-1.5 h-10 bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm"
+                title="Jump to Class & Section Academic Management"
+              >
+                <FolderKanban className="h-4 w-4 text-seneca-amber-light" />
+                <span className="hidden sm:inline">Classes & Depts</span>
+              </Button>
+            </Link>
+
             <Button
+              onClick={handleExportCSV}
               variant="outline"
               size="sm"
-              className="rounded-xl text-xs font-bold gap-1.5 h-10 border-border/80 hover:bg-muted shadow-2xs"
-              title="Jump to Class & Section Academic Management"
+              className="rounded-xl text-xs font-bold gap-1.5 h-10 bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm"
             >
-              <FolderKanban className="h-4 w-4 text-seneca-crimson" />
-              <span className="hidden sm:inline">Classes & Depts Desk</span>
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Export Syllabus</span>
             </Button>
-          </Link>
 
-          <Button
-            onClick={handleExportCSV}
-            variant="outline"
-            size="sm"
-            className="rounded-xl text-xs font-bold gap-1.5 h-10 border-border/80 hover:bg-muted shadow-2xs"
-          >
-            <Download className="h-4 w-4 text-muted-foreground" />
-            <span className="hidden sm:inline">Export Syllabus</span>
-          </Button>
+            <Button
+              onClick={() => setImportCsvModalOpen(true)}
+              variant="outline"
+              size="sm"
+              className="rounded-xl text-xs font-bold gap-1.5 h-10 bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm"
+            >
+              <Upload className="h-4 w-4 text-seneca-amber" />
+              <span className="hidden sm:inline">Import CSV</span>
+            </Button>
 
-          <Button
-            onClick={handleOpenCreateModal}
-            variant="glow"
-            size="sm"
-            className="rounded-xl text-xs font-bold gap-1.5 h-10 shadow-md shadow-seneca-crimson/25"
-          >
-            <Plus className="h-4 w-4 text-seneca-amber-light" />
-            <span>Add New Subject</span>
-          </Button>
+            <Button
+              onClick={handleOpenCreateModal}
+              variant="glow"
+              size="sm"
+              className="rounded-xl text-xs font-bold gap-1.5 h-10 shadow-lg shadow-seneca-amber/20"
+            >
+              <Plus className="h-4 w-4 text-seneca-amber-light" />
+              <span>Add New Subject</span>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -756,6 +805,48 @@ export default function PrincipalSubjectsPage() {
       {/* 4. Tab 1: Course Catalog & Syllabus */}
       {activeTab === "catalog" && (
         <div className="space-y-4 sm:space-y-6">
+          {/* Campus Wing Quick Filters */}
+          <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-muted/70 border border-border/80 w-fit">
+            <button
+              type="button"
+              onClick={() => setCampusWing("all")}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all",
+                activeWing === "all"
+                  ? "bg-card text-foreground shadow-sm border border-border/80"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All Syllabi ({subjects.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCampusWing("junior")}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5",
+                activeWing === "junior"
+                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 shadow-sm border border-amber-500/30"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+              Junior Wing (&le; Gr 2)
+            </button>
+            <button
+              type="button"
+              onClick={() => setCampusWing("senior")}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5",
+                activeWing === "senior"
+                  ? "bg-seneca-crimson/15 text-seneca-crimson dark:text-seneca-amber-light shadow-sm border border-seneca-crimson/30"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <GraduationCap className="h-3 w-3 text-seneca-crimson" />
+              Senior Wing (&gt; Gr 2)
+            </button>
+          </div>
+
           {/* Responsive Search & Filter Toolbar */}
           <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-xs rounded-2xl p-3 sm:p-4">
             <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
@@ -930,9 +1021,24 @@ export default function PrincipalSubjectsPage() {
                                 {sub.code}
                               </Badge>
                             </div>
-                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground mt-0.5">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                               <span className="font-medium truncate max-w-[150px]">{sub.department}</span>
+                              {assignedList.some((c) => isJuniorGrade(c.gradeLevel)) &&
+                              !assignedList.some((c) => isSeniorGrade(c.gradeLevel)) ? (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                                  Junior (&le; Gr 2)
+                                </span>
+                              ) : !assignedList.some((c) => isJuniorGrade(c.gradeLevel)) &&
+                                assignedList.some((c) => isSeniorGrade(c.gradeLevel)) ? (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-seneca-crimson/10 text-seneca-crimson dark:text-seneca-amber-light border border-seneca-crimson/30">
+                                  Senior (&gt; Gr 2)
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30">
+                                  Universal / Both Wings
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1853,6 +1959,21 @@ export default function PrincipalSubjectsPage() {
         variant="destructive"
         icon="trash"
         onConfirm={handleConfirmDeleteSubject}
+      />
+
+      {/* Bulk CSV Import Modal */}
+      <CsvImportModal
+        isOpen={importCsvModalOpen}
+        onClose={() => setImportCsvModalOpen(false)}
+        title="Bulk Curriculum Syllabus Import"
+        description="Upload a CSV spreadsheet to bulk register academic subjects, course codes, departments, weekly credit hours, and map them to appropriate class sections."
+        badgeLabel="Subject Syllabus Import"
+        templateFilename="Seneca_Curriculum_Subjects_Import_Template"
+        columns={SUBJECT_IMPORT_COLUMNS}
+        sampleData={SUBJECT_SAMPLE_DATA}
+        apiEndpoint="/api/subjects/import"
+        onSuccess={() => fetchSubjects()}
+        entityNamePlural="subjects"
       />
     </div>
   );

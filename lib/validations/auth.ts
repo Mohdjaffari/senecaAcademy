@@ -4,6 +4,7 @@ export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address.").toLowerCase().trim(),
   password: z.string().min(8, "Password must be at least 8 characters long."),
   expectedRole: z.enum(["super_admin", "principal", "teacher", "student", "user"]).optional(),
+  campusWing: z.enum(["all", "junior", "senior"]).optional(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

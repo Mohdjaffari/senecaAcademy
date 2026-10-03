@@ -42,6 +42,59 @@ export function apiError(error: unknown): NextResponse<ApiResponse<null>> {
     );
   }
 
+  // Catch uncaught MongoDB connection & network errors gracefully
+  const err = error as any;
+  if (
+    err?.name === "MongoServerSelectionError" ||
+    err?.name === "MongooseServerSelectionError" ||
+    err?.name === "MongoNetworkError" ||
+    err?.name === "MongoTimeoutError"
+  ) {
+    console.error("❌ Database Connection Failure in API:", err);
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "DATABASE_CONNECTION_ERROR",
+          message:
+            "Database connection failed. Please ensure your MongoDB cluster is running and your hosting IP address is whitelisted in MongoDB Atlas Network Access (0.0.0.0/0).",
+          details: process.env.NODE_ENV === "production" ? undefined : err?.message,
+        },
+      },
+      { status: 503 }
+    );
+  }
+
+  if (err?.name === "MongoServerError" && (err?.code === 18 || err?.codeName === "AuthenticationFailed")) {
+    console.error("❌ Database Authentication Failure in API:", err);
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "DATABASE_AUTH_ERROR",
+          message:
+            "Database authentication failed. Please verify your MongoDB database username, password, and database name in MONGODB_URI.",
+        },
+      },
+      { status: 500 }
+    );
+  }
+
+  if (typeof err?.message === "string" && err.message.includes("MONGODB_URI")) {
+    console.error("❌ Missing MONGODB_URI in API:", err);
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "DATABASE_CONFIG_ERROR",
+          message:
+            "Database configuration error: MONGODB_URI is not set. Please add MONGODB_URI to your Hostinger environment variables or .env file.",
+        },
+      },
+      { status: 500 }
+    );
+  }
+
   const message = error instanceof Error ? error.message : "Internal server error";
   console.error("Unhandled API Error:", error);
 

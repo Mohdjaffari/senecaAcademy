@@ -54,8 +54,11 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
+import { CAMPUS_WINGS } from "@/lib/constants/campus-wing";
 
 export interface PrincipalDashboardProps {
+  forcedWing?: "all" | "junior" | "senior";
   stats: {
     totalStudents: number;
     totalTeachers: number;
@@ -74,8 +77,28 @@ export interface PrincipalDashboardProps {
       recoveryRate: number;
     };
     classesList: any[];
+    wingStats?: {
+      junior: {
+        totalStudents: number;
+        totalTeachers: number;
+        totalClasses: number;
+        totalCapacity: number;
+        campusOccupancy: number;
+        studentTeacherRatio: number;
+      };
+      senior: {
+        totalStudents: number;
+        totalTeachers: number;
+        totalClasses: number;
+        totalCapacity: number;
+        campusOccupancy: number;
+        studentTeacherRatio: number;
+      };
+    };
     gradeEnrollmentData: {
       grade: string;
+      gradeLevel?: number;
+      wing?: "junior" | "senior";
       enrolled: number;
       capacity: number;
       occupancy: number;
@@ -113,7 +136,11 @@ export interface PrincipalDashboardProps {
   };
 }
 
-export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) {
+export function PrincipalExecutiveDashboard({ stats, forcedWing }: PrincipalDashboardProps) {
+  const { activeWing: hookWing, setCampusWing } = useCampusPortal(forcedWing);
+  const activeWing = forcedWing || hookWing;
+  const wingConfig = CAMPUS_WINGS[activeWing];
+
   const {
     totalStudents = 0,
     totalTeachers = 0,
@@ -139,7 +166,58 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
       dateString: "Today",
       isRecorded: false,
     },
+    wingStats,
   } = stats || {};
+
+  // Dynamically resolve metrics based on the active campus portal
+  const isJunior = activeWing === "junior";
+  const isSenior = activeWing === "senior";
+
+  const effectiveStudents = isJunior
+    ? (wingStats?.junior?.totalStudents ?? totalStudents)
+    : isSenior
+    ? (wingStats?.senior?.totalStudents ?? totalStudents)
+    : totalStudents;
+
+  const effectiveTeachers = isJunior
+    ? (wingStats?.junior?.totalTeachers ?? totalTeachers)
+    : isSenior
+    ? (wingStats?.senior?.totalTeachers ?? totalTeachers)
+    : totalTeachers;
+
+  const effectiveClasses = isJunior
+    ? (wingStats?.junior?.totalClasses ?? totalClasses)
+    : isSenior
+    ? (wingStats?.senior?.totalClasses ?? totalClasses)
+    : totalClasses;
+
+  const effectiveCapacity = isJunior
+    ? (wingStats?.junior?.totalCapacity ?? totalCapacity)
+    : isSenior
+    ? (wingStats?.senior?.totalCapacity ?? totalCapacity)
+    : totalCapacity;
+
+  const effectiveOccupancy = isJunior
+    ? (wingStats?.junior?.campusOccupancy ?? campusOccupancy)
+    : isSenior
+    ? (wingStats?.senior?.campusOccupancy ?? campusOccupancy)
+    : campusOccupancy;
+
+  const effectiveRatio = isJunior
+    ? (wingStats?.junior?.studentTeacherRatio ?? studentTeacherRatio)
+    : isSenior
+    ? (wingStats?.senior?.studentTeacherRatio ?? studentTeacherRatio)
+    : studentTeacherRatio;
+
+  const filteredGradeEnrollmentData = gradeEnrollmentData.filter((item) => {
+    if (isJunior) {
+      return item.wing === "junior" || (typeof item.gradeLevel === "number" && item.gradeLevel <= 2);
+    }
+    if (isSenior) {
+      return item.wing === "senior" || (typeof item.gradeLevel === "number" && item.gradeLevel > 2);
+    }
+    return true;
+  });
 
   const handleBroadcastNotice = () => {
     toast.info("Institutional Broadcast", {
@@ -155,8 +233,59 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in-50 duration-300 w-full overflow-x-hidden">
+      {/* Dedicated Campus Principal Portal Banner */}
+      {forcedWing && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card/90 border border-border/80 backdrop-blur-xl shadow-sm">
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "h-10 w-10 rounded-xl border flex items-center justify-center shrink-0 shadow-xs",
+                isJunior
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                  : "bg-seneca-crimson/15 text-seneca-crimson border-seneca-crimson/30"
+              )}
+            >
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-extrabold text-foreground">
+                  {isJunior
+                    ? "Junior Wing Principal Portal"
+                    : "Senior Wing Principal Portal"}
+                </span>
+                <Badge
+                  className={cn(
+                    "text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider",
+                    isJunior
+                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                      : "bg-seneca-crimson text-white shadow-xs"
+                  )}
+                >
+                  {isJunior ? "≤ Grade 2 Dedicated" : "> Grade 2 Dedicated"}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {isJunior
+                  ? "Early Childhood to Grade 2 Foundation Command Center (Playgroup, Nursery, KG, Gr 1, Gr 2)"
+                  : "Middle, High School, Matric & College Command Center (Grades 3 through 12)"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Executive Banner & Campus Command Lockup */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 bg-gradient-to-r from-seneca-crimson via-seneca-crimson-dark to-zinc-950 p-5 sm:p-8 text-white shadow-2xl">
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-2xl sm:rounded-3xl border border-white/10 p-5 sm:p-8 text-white shadow-2xl transition-all duration-300",
+          isJunior
+            ? "seneca-junior-hero-gradient"
+            : isSenior
+            ? "seneca-senior-hero-gradient"
+            : "seneca-hero-gradient"
+        )}
+      >
         {/* Ambient Glows */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-seneca-amber/20 blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -mb-16 h-64 w-64 rounded-full bg-seneca-crimson-light/20 blur-3xl pointer-events-none" />
@@ -166,7 +295,13 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-seneca-amber-light border border-white/10">
                 <Sparkles className="h-3 w-3" />
-                <span>Executive Command Center</span>
+                <span>
+                  {isJunior
+                    ? "Junior Wing Portal (Playgroup – Grade 2)"
+                    : isSenior
+                    ? "Senior Wing Portal (Grades 3 – 12 / College)"
+                    : "Executive Command Center"}
+                </span>
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] sm:text-[11px] font-bold border border-emerald-500/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -175,10 +310,26 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
             </div>
 
             <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold font-heading tracking-tight text-white leading-tight">
-              Principal Executive <span className="text-seneca-amber">Dashboard</span>
+              {isJunior ? (
+                <>
+                  Junior Campus <span className="text-seneca-amber">Executive Portal</span>
+                </>
+              ) : isSenior ? (
+                <>
+                  Senior Campus <span className="text-seneca-amber">Executive Portal</span>
+                </>
+              ) : (
+                <>
+                  Principal Executive <span className="text-seneca-amber">Dashboard</span>
+                </>
+              )}
             </h1>
             <p className="text-xs sm:text-sm text-white/80 max-w-2xl leading-relaxed">
-              Real-time institutional academic metrics, live student attendance, fee recovery dynamics, and admission pipeline monitoring for Seneca Academy.
+              {isJunior
+                ? "Dedicated executive suite for Playgroup, Nursery, Prep/KG, Grade 1, and Grade 2 (Early Years & Lower Primary). Real-time attendance, Montessori teacher assignments, and classroom dynamics."
+                : isSenior
+                ? "Dedicated executive suite for Grade 3 to Grade 12 / 2nd Year College (Upper Primary, Middle, Matric, Cambridge & Intermediate). Academic tracking, specialized faculty, and examination readiness."
+                : "Real-time institutional academic metrics, live student attendance, fee recovery dynamics, and admission pipeline monitoring across all campus wings for Seneca Academy."}
             </p>
           </div>
 
@@ -215,7 +366,7 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
           <CardContent className="p-4 sm:p-5 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Active Students
+                {isJunior ? "Junior Students" : isSenior ? "Senior Students" : "Active Students"}
               </span>
               <div className="p-2 rounded-xl bg-seneca-crimson/10 text-seneca-crimson">
                 <GraduationCap className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -223,17 +374,17 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground">
-                {totalStudents}
+                {effectiveStudents}
               </div>
               <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 <TrendingUp className="h-3.5 w-3.5" />
-                <span>{totalClasses} Active Class Sections</span>
+                <span>{effectiveClasses} Active Class Sections</span>
               </div>
             </div>
             <div className="pt-2 border-t border-border/60 flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Campus Capacity:</span>
+              <span>Wing Capacity:</span>
               <span className="font-bold text-foreground">
-                {campusOccupancy}% ({totalStudents}/{totalCapacity || "—"})
+                {effectiveOccupancy}% ({effectiveStudents}/{effectiveCapacity || "—"})
               </span>
             </div>
           </CardContent>
@@ -244,7 +395,7 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
           <CardContent className="p-4 sm:p-5 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                Faculty Mentors
+                {isJunior ? "Junior Faculty" : isSenior ? "Senior Faculty" : "Faculty Mentors"}
               </span>
               <div className="p-2 rounded-xl bg-seneca-amber/15 text-seneca-amber">
                 <Users className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -252,17 +403,17 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground">
-                {totalTeachers}
+                {effectiveTeachers}
               </div>
               <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>{totalTeachers > 0 ? "Active Faculty Roster" : "No Faculty Registered"}</span>
+                <span>{effectiveTeachers > 0 ? "Active Faculty Roster" : "No Faculty Registered"}</span>
               </div>
             </div>
             <div className="pt-2 border-t border-border/60 flex items-center justify-between text-[10px] text-muted-foreground">
               <span>Student : Teacher:</span>
               <span className="font-bold text-foreground">
-                {totalTeachers > 0 ? `1 : ${studentTeacherRatio}` : "—"} Ratio
+                {effectiveTeachers > 0 ? `1 : ${effectiveRatio}` : "—"} Ratio
               </span>
             </div>
           </CardContent>
@@ -543,10 +694,10 @@ export function PrincipalExecutiveDashboard({ stats }: PrincipalDashboardProps) 
           </CardHeader>
           <CardContent className="p-3 sm:p-6 pt-4">
             <div className="h-64 sm:h-72 w-full">
-              {gradeEnrollmentData.length > 0 ? (
+              {filteredGradeEnrollmentData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={gradeEnrollmentData}
+                    data={filteredGradeEnrollmentData}
                     margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" opacity={0.15} />

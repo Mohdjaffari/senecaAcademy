@@ -19,6 +19,7 @@ import "@/models/FeePayment";
 import "@/models/Admission";
 import "@/models/TeacherApplication";
 import "@/models/Announcement";
+import "@/models/Holiday";
 import "@/models/Blog";
 import "@/models/Gallery";
 import "@/models/Message";

@@ -4,7 +4,8 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
+    /* Executive Warm Alabaster Canvas (Light Mode) */
+    --background: 218 25% 97.5%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -13,76 +14,77 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Seneca Crimson as Primary: #810D0B -> hsl(359, 83%, 28%) */
+    /* Seneca Royal Crimson as Primary: #810D0B -> hsl(359, 83%, 28%) */
     --primary: 359 83% 28%;
     --primary-foreground: 0 0% 100%;
 
-    /* Seneca Amber as Secondary: #E27B1F -> hsl(28, 80%, 50%) */
+    /* Seneca Warm Amber as Secondary: #E27B1F -> hsl(28, 80%, 50%) */
     --secondary: 28 80% 50%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 210 20% 94%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 214 22% 93%;
+    --muted-foreground: 215 16% 45%;
 
-    --accent: 28 80% 95%;
+    --accent: 28 80% 96%;
     --accent-foreground: 359 83% 28%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
+    --border: 215 25% 89%;
+    --input: 215 25% 89%;
     --ring: 359 83% 28%;
 
-    --radius: 0.75rem;
+    --radius: 0.85rem;
 
     /* Dashboard Sidebar Specific Tokens */
-    --sidebar-background: 222 35% 8%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 359 83% 28%;
+    --sidebar-background: 224 45% 6.5%;
+    --sidebar-foreground: 210 20% 92%;
+    --sidebar-primary: 359 83% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 25% 15%;
+    --sidebar-accent: 224 30% 13%;
     --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 222 20% 16%;
+    --sidebar-border: 224 25% 13%;
     --sidebar-ring: 28 80% 50%;
   }
 
   .dark {
-    --background: 222 35% 8%;
+    /* Executive Obsidian Midnight Canvas (Dark Mode) */
+    --background: 224 45% 6.5%;
     --foreground: 210 20% 98%;
 
-    --card: 222 30% 12%;
+    --card: 224 35% 10%;
     --card-foreground: 210 20% 98%;
 
-    --popover: 222 30% 12%;
+    --popover: 224 35% 10%;
     --popover-foreground: 210 20% 98%;
 
-    --primary: 359 75% 42%;
+    --primary: 359 75% 45%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 28 85% 55%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 222 25% 18%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 224 25% 16%;
+    --muted-foreground: 215 20% 68%;
 
-    --accent: 222 25% 20%;
+    --accent: 224 25% 18%;
     --accent-foreground: 210 20% 98%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 35%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 222 20% 18%;
-    --input: 222 20% 18%;
+    --border: 224 25% 16.5%;
+    --input: 224 25% 16.5%;
     --ring: 28 85% 55%;
 
-    --sidebar-background: 222 40% 6%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 359 75% 42%;
+    --sidebar-background: 224 48% 5%;
+    --sidebar-foreground: 210 20% 92%;
+    --sidebar-primary: 359 75% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 30% 14%;
+    --sidebar-accent: 224 30% 12%;
     --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 222 25% 14%;
+    --sidebar-border: 224 25% 11%;
     --sidebar-ring: 28 85% 55%;
   }
 }
@@ -106,17 +108,30 @@
 
 /* Glassmorphic utilities */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .dark .glass-panel {
-  background: rgba(26, 29, 39, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(15, 20, 31, 0.90);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Seneca Executive Gradient Utilities */
+.seneca-hero-gradient {
+  background: linear-gradient(135deg, #810D0B 0%, #5C0706 45%, #0B0F17 100%);
+}
+
+.seneca-junior-hero-gradient {
+  background: linear-gradient(135deg, #B85C0A 0%, #810D0B 45%, #0B0F17 100%);
+}
+
+.seneca-senior-hero-gradient {
+  background: linear-gradient(135deg, #810D0B 0%, #3B0504 50%, #080D1A 100%);
 }
 
 /* Custom Scrollbars */
@@ -128,9 +143,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(129, 13, 11, 0.2);
+  background: rgba(129, 13, 11, 0.25);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(129, 13, 11, 0.4);
+  background: rgba(129, 13, 11, 0.45);
 }

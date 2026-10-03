@@ -100,12 +100,12 @@ export function DashboardTopbar({
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="outline"
             size="sm"
             asChild
-            className="hidden sm:inline-flex rounded-full text-xs font-semibold gap-1.5"
+            className="hidden md:inline-flex rounded-full text-xs font-semibold gap-1.5"
           >
             <Link href="/" target="_blank">
               <ExternalLink className="h-3.5 w-3.5" />

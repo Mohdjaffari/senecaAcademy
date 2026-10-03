@@ -45,6 +45,7 @@ import {
   BookMarked,
   School,
   FolderPlus,
+  Upload,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import CsvImportModal from "@/components/dashboard/CsvImportModal";
+import { CLASS_IMPORT_COLUMNS, CLASS_SAMPLE_DATA } from "@/lib/utils/csv-helper";
 import {
   ACADEMIC_SPECTRUM,
   ACADEMIC_TIERS,
@@ -69,6 +72,8 @@ import {
   WINGS,
   AcademicGrade,
 } from "@/lib/constants/academic-spectrum";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
+import { isJuniorGrade, isSeniorGrade } from "@/lib/constants/campus-wing";
 
 interface DepartmentData {
   id: string;
@@ -136,6 +141,7 @@ interface TeacherOption {
 }
 
 export default function PrincipalClassesPage() {
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [activeTab, setActiveTab] = useState<"classes" | "allocations" | "departments" | "wizard">("classes");
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [departments, setDepartments] = useState<DepartmentData[]>([]);
@@ -149,6 +155,7 @@ export default function PrincipalClassesPage() {
 
   // Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [importCsvModalOpen, setImportCsvModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassData | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
   const [classToDelete, setClassToDelete] = useState<ClassData | null>(null);
@@ -265,6 +272,10 @@ export default function PrincipalClassesPage() {
 
   // Filter classes
   const filteredClasses = classes.filter((cls) => {
+    // Campus portal wing filter
+    if (activeWing === "junior" && !isJuniorGrade(cls.gradeLevel)) return false;
+    if (activeWing === "senior" && !isSeniorGrade(cls.gradeLevel)) return false;
+
     const matchesSearch =
       cls.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cls.section.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -293,9 +304,9 @@ export default function PrincipalClassesPage() {
   });
 
   // Summary Metrics
-  const totalClasses = classes.length;
-  const totalCapacity = classes.reduce((acc, curr) => acc + (curr.capacity || 35), 0);
-  const totalEnrolled = classes.reduce((acc, curr) => acc + (curr.enrolledCount || 0), 0);
+  const totalClasses = filteredClasses.length;
+  const totalCapacity = filteredClasses.reduce((acc, curr) => acc + (curr.capacity || 35), 0);
+  const totalEnrolled = filteredClasses.reduce((acc, curr) => acc + (curr.enrolledCount || 0), 0);
   const overallOccupancy = totalCapacity > 0 ? Math.round((totalEnrolled / totalCapacity) * 100) : 0;
   const totalDepartments = departments.length;
 
@@ -629,7 +640,16 @@ export default function PrincipalClassesPage() {
   return (
     <div className="space-y-5 sm:space-y-8 animate-in fade-in-50 duration-300 w-full overflow-x-hidden">
       {/* 1. Header & Hero Metric Banner */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 bg-gradient-to-r from-seneca-crimson via-seneca-crimson-dark to-zinc-950 p-4 sm:p-8 text-white shadow-2xl">
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 p-4 sm:p-8 text-white shadow-2xl transition-all duration-300",
+          activeWing === "junior"
+            ? "seneca-junior-hero-gradient"
+            : activeWing === "senior"
+            ? "seneca-senior-hero-gradient"
+            : "seneca-hero-gradient"
+        )}
+      >
         <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-seneca-amber/20 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
@@ -637,7 +657,7 @@ export default function PrincipalClassesPage() {
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-seneca-amber-light border border-white/10">
                 <Layers className="h-3 w-3" />
-                <span>Playgroup to 2nd Year Academic Architecture</span>
+                <span>{wingConfig.name}</span>
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] sm:text-[11px] font-bold border border-emerald-500/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -649,12 +669,16 @@ export default function PrincipalClassesPage() {
               Class & Section <span className="text-seneca-amber">Academic Management</span>
             </h1>
             <p className="text-xs sm:text-sm text-white/80 max-w-2xl leading-relaxed">
-              Configure class sections from Playgroup through 2nd Year (Intermediate), allocate academic streams, manage classroom capacities, and oversee specialist faculty allocations.
+              {activeWing === "junior"
+                ? "Oversee Early Childhood and Lower Primary grades (Playgroup, Nursery, KG, Grade 1, Grade 2), section capacities, and foundational homeroom teachers."
+                : activeWing === "senior"
+                ? "Manage Upper Primary, Middle, Secondary (Matric/Cambridge), and Intermediate sections, streams, and specialist department allocations."
+                : "Configure class sections from Playgroup through 2nd Year (Intermediate), allocate academic streams, manage classroom capacities, and oversee specialist faculty allocations."}
             </p>
           </div>
 
           {/* Action Buttons on Class Management Page */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-4 lg:flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
             <Button
               onClick={handleExportCSV}
               variant="outline"
@@ -663,6 +687,15 @@ export default function PrincipalClassesPage() {
             >
               <Download className="h-3.5 w-3.5 mr-1.5" />
               <span>Export CSV</span>
+            </Button>
+            <Button
+              onClick={() => setImportCsvModalOpen(true)}
+              variant="outline"
+              size="sm"
+              className="rounded-xl font-bold text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm w-full sm:w-auto justify-center gap-1.5"
+            >
+              <Upload className="h-3.5 w-3.5 text-seneca-amber" />
+              <span>Import CSV</span>
             </Button>
             <Button
               onClick={handleOpenCreateDeptModal}
@@ -821,6 +854,26 @@ export default function PrincipalClassesPage() {
       {/* ========================================================================= */}
       {activeTab === "classes" && (
         <div className="space-y-4">
+          {/* Institutional Wing Scope Indicator (Locked per Principal Portal) */}
+          {activeWing !== "all" && (
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-card border border-border/80 shadow-sm text-xs font-semibold text-muted-foreground w-fit">
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  activeWing === "junior" ? "bg-amber-500 animate-pulse" : "bg-seneca-crimson animate-pulse"
+                )}
+              />
+              <span>
+                Campus Portal Scope:{" "}
+                <strong className="text-foreground">
+                  {activeWing === "junior"
+                    ? "Junior Wing (Playgroup – Grade 2)"
+                    : "Senior Wing (Grade 3 – 12 / College)"}
+                </strong>
+              </span>
+            </div>
+          )}
+
           {/* Filters & Search Toolbar */}
           <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-sm rounded-2xl p-3 sm:p-4">
             <div className="flex flex-col md:flex-row items-center justify-between gap-3">
@@ -976,8 +1029,20 @@ export default function PrincipalClassesPage() {
                       </Badge>
                     </div>
 
-                    {/* Department & Stream Badge */}
+                    {/* Department, Stream & Wing Badge */}
                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {isJuniorGrade(cls.gradeLevel) ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                          <Sparkles className="h-2.5 w-2.5" />
+                          <span>Junior Wing (&le; Gr 2)</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-seneca-crimson/10 text-seneca-crimson dark:text-seneca-amber-light border border-seneca-crimson/30">
+                          <GraduationCap className="h-2.5 w-2.5" />
+                          <span>Senior Wing (&gt; Gr 2)</span>
+                        </span>
+                      )}
+
                       {cls.department ? (
                         <span
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold"
@@ -1102,7 +1167,18 @@ export default function PrincipalClassesPage() {
                               {cls.section}
                             </div>
                             <div>
-                              <div className="font-bold text-foreground text-xs">{cls.name}</div>
+                              <div className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                                <span>{cls.name}</span>
+                                {isJuniorGrade(cls.gradeLevel) ? (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                    Junior
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-seneca-crimson/10 text-seneca-crimson dark:text-seneca-amber-light border border-seneca-crimson/20">
+                                    Senior
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-[10px] text-muted-foreground">
                                 Level: {cls.gradeLevel === 0 ? "Early Years" : `Grade ${cls.gradeLevel}`}
                               </div>
@@ -2166,6 +2242,21 @@ export default function PrincipalClassesPage() {
         variant="destructive"
         icon="trash"
         onConfirm={handleConfirmDeleteDept}
+      />
+
+      {/* Bulk CSV Import Modal */}
+      <CsvImportModal
+        isOpen={importCsvModalOpen}
+        onClose={() => setImportCsvModalOpen(false)}
+        title="Bulk Class Section Architecture Import"
+        description="Upload a CSV spreadsheet to bulk configure grade tiers, classroom sections, room allocations, student capacities, and academic streams across Playgroup through 2nd Year."
+        badgeLabel="Class Architecture Import"
+        templateFilename="Seneca_Class_Sections_Import_Template"
+        columns={CLASS_IMPORT_COLUMNS}
+        sampleData={CLASS_SAMPLE_DATA}
+        apiEndpoint="/api/classes/import"
+        onSuccess={() => fetchClasses()}
+        entityNamePlural="classes"
       />
     </div>
   );

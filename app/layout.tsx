@@ -30,6 +30,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_CANONICAL_URL ||
+    "https://senecaacademy.school"
+  ),
   title: "Seneca Academy — Premier School Management System & LMS",
   description:
     "Official portal and comprehensive learning management system for Seneca Academy. Shaping tomorrow's leaders through academic rigor and character building.",

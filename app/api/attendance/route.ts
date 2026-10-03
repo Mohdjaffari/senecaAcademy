@@ -26,13 +26,15 @@ export async function GET(req: NextRequest) {
     if (session.role === "teacher") {
       teacherRecord = await Teacher.findOne({ userId: session.userId }).lean();
       if (teacherRecord) {
+        const assignedIds = (teacherRecord.assignedClassIds || []).map((id: any) => id.toString());
         const classesHeaded = await Class.find({
           $or: [
             { classTeacherId: teacherRecord._id },
             { _id: { $in: teacherRecord.headOfClassIds || [] } },
+            { _id: { $in: assignedIds } },
           ],
           status: "active",
-        }).lean();
+        }).sort({ gradeLevel: 1, section: 1 }).lean();
 
         headClasses = classesHeaded.map((c) => ({
           id: c._id.toString(),
@@ -197,10 +199,11 @@ export async function POST(req: NextRequest) {
 
       const isClassTeacher = targetClass.classTeacherId && targetClass.classTeacherId.toString() === teacher._id.toString();
       const inHeadOfClasses = (teacher.headOfClassIds || []).some((id: any) => id.toString() === classId.toString());
+      const inAssignedClasses = (teacher.assignedClassIds || []).some((id: any) => id.toString() === classId.toString());
 
-      if (!isClassTeacher && !inHeadOfClasses) {
+      if (!isClassTeacher && !inHeadOfClasses && !inAssignedClasses) {
         throw new AuthorizationError(
-          "Permission Denied: Only the designated Head of Class (Class Teacher) can record student attendance for this class."
+          "Permission Denied: Only teachers assigned to this class section can record student attendance."
         );
       }
 

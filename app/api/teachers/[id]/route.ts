@@ -22,7 +22,7 @@ export async function GET(
     await connectToDatabase();
 
     const teacher: any = await Teacher.findById(id)
-      .populate("userId", "name email phone avatarUrl status rawPassword")
+      .populate("userId", "name email phone avatarUrl status")
       .populate("assignedClassIds", "name gradeLevel section")
       .populate("assignedSubjectIds", "name code department")
       .populate("headOfClassIds", "name gradeLevel section")
@@ -62,7 +62,6 @@ export async function GET(
       id: teacher._id.toString(),
       name: teacher.userId?.name || "Teacher",
       email: teacher.userId?.email || "",
-      rawPassword: isAdmin ? (teacher.rawPassword || teacher.userId?.rawPassword || "Teacher2026!") : undefined,
       phone: teacher.userId?.phone || "",
       employeeId: teacher.employeeId,
       specialization: teacher.specialization,
@@ -131,8 +130,6 @@ export async function PATCH(
     if (body.password && body.password.trim()) {
       const passwordHash = await hashPassword(body.password.trim());
       updateUserData.passwordHash = passwordHash;
-      updateUserData.rawPassword = body.password.trim();
-      teacher.rawPassword = body.password.trim();
     }
 
     if (Object.keys(updateUserData).length > 0) {
@@ -180,7 +177,7 @@ export async function PATCH(
     await teacher.save();
 
     const updated = await Teacher.findById(id)
-      .populate("userId", "name email phone avatarUrl status rawPassword")
+      .populate("userId", "name email phone avatarUrl status")
       .populate("assignedClassIds", "name gradeLevel section")
       .populate("assignedSubjectIds", "name code department")
       .populate("headOfClassIds", "name gradeLevel section")

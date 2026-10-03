@@ -34,7 +34,13 @@ const isLocalOrPrivateNetwork = (hostname: string): boolean => {
 };
 
 function getEncodedKey(): Uint8Array {
-  const secret = process.env.AUTH_SECRET || "default_super_secret_auth_token_key_change_in_production_2026";
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("FATAL: AUTH_SECRET must be configured in environment variables for production security.");
+    }
+    return new TextEncoder().encode("default_super_secret_auth_token_key_change_in_production_2026");
+  }
   return new TextEncoder().encode(secret);
 }
 
@@ -116,6 +122,12 @@ export async function middleware(request: NextRequest) {
     const session = await verifyToken(token);
     if (session) {
       if (session.role === "super_admin" || session.role === "principal") {
+        const wingCookie = request.cookies.get("seneca_campus_wing")?.value;
+        if (wingCookie === "junior") {
+          return NextResponse.redirect(new URL("/junior-portal", request.url));
+        } else if (wingCookie === "senior") {
+          return NextResponse.redirect(new URL("/senior-portal", request.url));
+        }
         return NextResponse.redirect(new URL("/dashboard", request.url));
       }
       if (session.role === "teacher") {
@@ -134,7 +146,10 @@ export async function middleware(request: NextRequest) {
   const session = token ? await verifyToken(token) : null;
 
   // 3. Strict Protected Routes Security Enforcement (No unauthenticated direct access)
-  const isDashboardRoute = pathname.startsWith("/dashboard");
+  const isDashboardRoute =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/junior-portal") ||
+    pathname.startsWith("/senior-portal");
   const isTeacherRoute = pathname.startsWith("/teacher");
   const isStudentRoute = pathname.startsWith("/student");
   const isProtectedAdmissionsRoute = pathname.startsWith("/admissions/status");
@@ -196,6 +211,10 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/junior-portal/:path*",
+    "/junior-portal",
+    "/senior-portal/:path*",
+    "/senior-portal",
     "/teacher/:path*",
     "/student/:path*",
     "/admissions/status/:path*",

@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
       throw new NotFoundError("Teacher profile not found.");
     }
 
-    // 2. Identify all assigned subjects / curriculum books
     const assignedSubjectIds = (teacherProfile.assignedSubjectIds || []).map((s: any) =>
       (s._id || s).toString()
     );
@@ -56,10 +55,23 @@ export async function GET(req: NextRequest) {
       (c._id || c).toString()
     );
 
+    const headedClasses = await Class.find({
+      $or: [
+        { classTeacherId: teacherProfile._id },
+        { _id: { $in: teacherProfile.headOfClassIds || [] } },
+      ],
+      status: "active",
+    }).lean();
+
+    const headClassIds = headedClasses.map((c) => c._id.toString());
+    const allTeacherClassIds = Array.from(
+      new Set([...assignedClassIds, ...headClassIds])
+    );
+
     let subjects = await Subject.find({
       $or: [
         { _id: { $in: assignedSubjectIds } },
-        ...(assignedClassIds.length > 0 ? [{ classIds: { $in: assignedClassIds } }] : []),
+        ...(allTeacherClassIds.length > 0 ? [{ classIds: { $in: allTeacherClassIds } }] : []),
       ],
     })
       .populate("classIds", "name section gradeLevel stream")

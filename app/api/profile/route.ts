@@ -295,7 +295,6 @@ export async function PATCH(req: NextRequest) {
         throw new ValidationError("New password must be at least 6 characters.");
       }
       user.passwordHash = await bcrypt.hash(newPassword, 12);
-      user.rawPassword = newPassword;
     }
 
     await user.save();

@@ -42,6 +42,7 @@ import {
   UserCheck,
   ShieldCheck,
   CalendarCheck,
+  Upload,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,9 @@ import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import CsvImportModal from "@/components/dashboard/CsvImportModal";
+import { TEACHER_IMPORT_COLUMNS, TEACHER_SAMPLE_DATA } from "@/lib/utils/csv-helper";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
 
 interface SubjectOption {
   id: string;
@@ -98,7 +102,6 @@ interface TeacherData {
   userId?: string;
   name: string;
   email: string;
-  rawPassword?: string;
   phone: string;
   employeeId: string;
   specialization: string;
@@ -108,12 +111,14 @@ interface TeacherData {
   status: "active" | "on_leave" | "suspended" | "terminated";
   userStatus?: string;
   isClassHead?: boolean;
+  wing?: "junior" | "senior" | "both" | "unassigned";
   headOfClassIds?: string[];
   headOfClasses?: Array<{ id: string; name: string; section: string; fullName: string; gradeLevel: number }>;
   headOfClassNames?: string[];
   assignedClassIds?: string[];
   assignedSubjectIds?: string[];
   assignedClasses: string[];
+  assignedClassDetails?: Array<{ id: string; name: string; section: string; gradeLevel: number }>;
   assignedSubjects: string[];
   assignedSubjectDetails?: Array<{
     id: string;
@@ -155,16 +160,26 @@ export default function PrincipalTeachersPage() {
   const [allClasses, setAllClasses] = useState<ClassOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<"all" | "head" | "specialist">("all");
+  const [selectedWingFilter, setSelectedWingFilter] = useState<"all" | "junior" | "senior">("all");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+
+  // Keep local wing filter in sync with global Campus Portal mode
+  useEffect(() => {
+    if (activeWing) {
+      setSelectedWingFilter(activeWing);
+    }
+  }, [activeWing]);
 
   // Visibility state for passwords (keyed by teacher ID)
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
 
   // Modal States
   const [onboardModalOpen, setOnboardModalOpen] = useState(false);
+  const [importCsvModalOpen, setImportCsvModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<TeacherData | null>(null);
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherData | null>(null);
   const [teacherToDelete, setTeacherToDelete] = useState<TeacherData | null>(null);
@@ -218,7 +233,7 @@ export default function PrincipalTeachersPage() {
     setFormEmployeeId(t.employeeId);
     setFormName(t.name);
     setFormEmail(t.email);
-    setFormPassword(t.rawPassword || "Teacher2026!");
+    setFormPassword("");
     setFormSpecialization(t.specialization);
     setFormQualification(t.qualification);
     setFormExperience(String(t.experienceYears || 1));
@@ -327,7 +342,71 @@ export default function PrincipalTeachersPage() {
     });
   };
 
-  // Filter teachers
+  const handleResetTeacherPassword = async (teacher: TeacherData) => {
+    const tempPassword = `Seneca@${Math.floor(100000 + Math.random() * 900000)}`;
+    try {
+      const res = await fetch(`/api/teachers/${teacher.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: tempPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error?.message || "Failed to reset password.");
+
+      navigator.clipboard.writeText(tempPassword);
+      toast.success("New Password Generated & Copied!", {
+        description: `Temporary password for ${teacher.name} is: ${tempPassword} (Copied to clipboard). Provide this to the teacher for immediate login.`,
+        duration: 10000,
+      });
+    } catch (err: any) {
+      toast.error("Password Reset Failed", { description: err.message });
+    }
+  };
+
+  // Helper functions to categorize faculty by Campus Wing
+  const isTeacherJunior = (t: TeacherData) => {
+    if (t.wing === "junior" || t.wing === "both") return true;
+    if (t.assignedClassDetails && t.assignedClassDetails.some((c) => c.gradeLevel <= 2)) return true;
+    if (t.headOfClasses && t.headOfClasses.some((c) => c.gradeLevel <= 2)) return true;
+    const classes = [...(t.assignedClasses || []), ...(t.headOfClassNames || [])];
+    const hasEarlyClass = classes.some((c) => {
+      const cl = c.toLowerCase();
+      return (
+        cl.includes("playgroup") ||
+        cl.includes("nursery") ||
+        cl.includes("prep") ||
+        cl.includes("kg") ||
+        cl.includes("grade 1") ||
+        cl.includes("grade 2")
+      );
+    });
+    if (hasEarlyClass) return true;
+    if (t.specialization && /montessori|early|ece|nursery|kindergarten/i.test(t.specialization)) return true;
+    return false;
+  };
+
+  const isTeacherSenior = (t: TeacherData) => {
+    if (t.wing === "senior" || t.wing === "both") return true;
+    if (t.assignedClassDetails && t.assignedClassDetails.some((c) => c.gradeLevel > 2)) return true;
+    if (t.headOfClasses && t.headOfClasses.some((c) => c.gradeLevel > 2)) return true;
+    const classes = [...(t.assignedClasses || []), ...(t.headOfClassNames || [])];
+    const hasSeniorClass = classes.some((c) => {
+      const cl = c.toLowerCase();
+      return (
+        !cl.includes("playgroup") &&
+        !cl.includes("nursery") &&
+        !cl.includes("prep") &&
+        !cl.includes("kg") &&
+        !cl.includes("grade 1") &&
+        !cl.includes("grade 2")
+      );
+    });
+    if (hasSeniorClass) return true;
+    if (t.specialization && !/montessori|early|ece|nursery|kindergarten/i.test(t.specialization)) return true;
+    return false;
+  };
+
+  // Filter teachers by Search, Department, Status, Role, and Campus Wing
   const filteredTeachers = teachers.filter((t) => {
     const matchesSearch =
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -347,7 +426,12 @@ export default function PrincipalTeachersPage() {
       (selectedRoleFilter === "head" && t.isClassHead) ||
       (selectedRoleFilter === "specialist" && !t.isClassHead);
 
-    return matchesSearch && matchesDept && matchesStatus && matchesRole;
+    const matchesWing =
+      selectedWingFilter === "all" ||
+      (selectedWingFilter === "junior" && isTeacherJunior(t)) ||
+      (selectedWingFilter === "senior" && isTeacherSenior(t));
+
+    return matchesSearch && matchesDept && matchesStatus && matchesRole && matchesWing;
   });
 
   // Summary Metrics
@@ -356,6 +440,8 @@ export default function PrincipalTeachersPage() {
   const classHeadCount = teachers.filter((t) => t.isClassHead).length;
   const onLeaveCount = teachers.filter((t) => t.status === "on_leave" || t.status === "suspended").length;
   const specialistCount = teachers.filter((t) => !t.isClassHead).length;
+  const juniorFacultyCount = teachers.filter(isTeacherJunior).length;
+  const seniorFacultyCount = teachers.filter(isTeacherSenior).length;
 
   const toggleSubjectAssignment = (subjId: string) => {
     setFormAssignedSubjectIds((prev) =>
@@ -496,23 +582,40 @@ export default function PrincipalTeachersPage() {
   };
 
   const handleExportCSV = () => {
-    if (teachers.length === 0) return toast.info("No faculty records to export.");
-    const headers = "Employee ID,Teacher Name,Email,Portal Password,Phone,Specialization,Qualification,Status,Head of Class,Assigned Subjects,Assigned Classes\n";
-    const rows = teachers
-      .map(
-        (t) =>
-          `"${t.employeeId}","${t.name}","${t.email}","${t.rawPassword || "Teacher2026!"}","${t.phone}","${t.specialization}","${t.qualification}","${t.status}","${(t.headOfClassNames || []).join(" | ") || "None"}","${(t.assignedSubjects || []).join(" | ")}","${(t.assignedClasses || []).join(" | ")}"`
-      )
+    const exportList = filteredTeachers.length > 0 ? filteredTeachers : teachers;
+    if (exportList.length === 0) return toast.info("No faculty records to export.");
+
+    const headers =
+      "Employee ID,Teacher Name,Email,Account Security,Phone,Campus Wing,Specialization,Qualification,Status,Head of Class,Assigned Subjects,Assigned Classes\n";
+    const rows = exportList
+      .map((t) => {
+        const wingLabel =
+          isTeacherJunior(t) && isTeacherSenior(t)
+            ? "Junior & Senior Wings"
+            : isTeacherJunior(t)
+            ? "Junior Wing (<= Gr 2)"
+            : isTeacherSenior(t)
+            ? "Senior Wing (> Gr 2)"
+            : "General Faculty";
+
+        return `"${t.employeeId}","${t.name}","${t.email}","Encrypted (Bcrypt)","${t.phone}","${wingLabel}","${t.specialization}","${t.qualification}","${t.status}","${(t.headOfClassNames || []).join(" | ") || "None"}","${(t.assignedSubjects || []).join(" | ")}","${(t.assignedClasses || []).join(" | ")}"`;
+      })
       .join("\n");
-    const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + headers + rows], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Seneca_Faculty_Credentials_${new Date().toISOString().slice(0, 10)}.csv`);
+    const wingSuffix = selectedWingFilter !== "all" ? `_${selectedWingFilter.toUpperCase()}` : "";
+    link.setAttribute(
+      "download",
+      `Seneca_Faculty_Roster${wingSuffix}_${new Date().toISOString().slice(0, 10)}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success("Faculty roster and credentials exported to CSV!");
+    toast.success(`Exported ${exportList.length} faculty credentials & records to CSV!`);
   };
 
   const filteredStudentRoster = teacherStudents.filter((s) => {
@@ -563,6 +666,16 @@ export default function PrincipalTeachersPage() {
             >
               <Download className="h-4 w-4" />
               <span>Export Roster & Passwords</span>
+            </Button>
+
+            <Button
+              onClick={() => setImportCsvModalOpen(true)}
+              variant="outline"
+              size="sm"
+              className="rounded-xl text-xs font-bold gap-1.5 h-10 bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm"
+            >
+              <Upload className="h-4 w-4 text-seneca-amber" />
+              <span>Import CSV</span>
             </Button>
 
             <Button
@@ -645,8 +758,106 @@ export default function PrincipalTeachersPage() {
         </Card>
       </div>
 
-      {/* 3. Filter Toolbar */}
-      <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-sm rounded-2xl p-3 sm:p-4">
+      {/* 3. Filter Toolbar & Wing Switcher */}
+      <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-sm rounded-2xl p-3 sm:p-4 space-y-3">
+        {/* Campus Wing Tabs (Junior <= Gr 2 vs Senior > Gr 2) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-border/60">
+          {activeWing === "junior" ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300">
+              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-xs font-extrabold uppercase tracking-wide">
+                Junior Wing Faculty Directory (≤ Grade 2)
+              </span>
+              <Badge className="bg-amber-500 text-white text-[10px] font-black ml-1">
+                {juniorFacultyCount} Early Educators
+              </Badge>
+            </div>
+          ) : activeWing === "senior" ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-seneca-crimson/15 border border-seneca-crimson/30 text-seneca-crimson dark:text-seneca-amber-light">
+              <GraduationCap className="h-4 w-4 text-seneca-crimson" />
+              <span className="text-xs font-extrabold uppercase tracking-wide">
+                Senior Wing Faculty Directory (&gt; Grade 2)
+              </span>
+              <Badge className="bg-seneca-crimson text-white text-[10px] font-black ml-1">
+                {seniorFacultyCount} Senior Instructors
+              </Badge>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-muted/60 border border-border/70">
+              <button
+                type="button"
+                onClick={() => setSelectedWingFilter("all")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                  selectedWingFilter === "all"
+                    ? "bg-background text-foreground shadow-xs border border-border/60"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span>All Faculty</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-muted text-[10px] font-extrabold">{totalFaculty}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedWingFilter("junior")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                  selectedWingFilter === "junior"
+                    ? "bg-amber-500 text-white shadow-md shadow-amber-500/20 font-black"
+                    : "text-muted-foreground hover:text-amber-600"
+                )}
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>Junior Wing (≤ Gr 2)</span>
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-md text-[10px] font-extrabold",
+                    selectedWingFilter === "junior" ? "bg-white/20 text-white" : "bg-muted"
+                  )}
+                >
+                  {juniorFacultyCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedWingFilter("senior")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                  selectedWingFilter === "senior"
+                    ? "bg-seneca-crimson text-white shadow-md shadow-seneca-crimson/20 font-black"
+                    : "text-muted-foreground hover:text-seneca-crimson"
+                )}
+              >
+                <GraduationCap className="h-3 w-3" />
+                <span>Senior Wing (&gt; Gr 2)</span>
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-md text-[10px] font-extrabold",
+                    selectedWingFilter === "senior" ? "bg-white/20 text-white" : "bg-muted"
+                  )}
+                >
+                  {seniorFacultyCount}
+                </span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">
+              Scope:{" "}
+              <strong className="text-foreground">
+                {activeWing === "junior" || selectedWingFilter === "junior"
+                  ? "Playgroup – Grade 2 (Early Years & Lower Primary)"
+                  : activeWing === "senior" || selectedWingFilter === "senior"
+                  ? "Grade 3 – 12 / College (Upper Primary & College)"
+                  : "Dual-Campus Institutional Master"}
+              </strong>
+            </span>
+          </div>
+        </div>
+
         <div className="flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="relative w-full md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -780,7 +991,7 @@ export default function PrincipalTeachersPage() {
               <thead>
                 <tr className="border-b border-border/60 bg-muted/40 text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
                   <th className="py-3.5 px-4">Faculty & Credentials</th>
-                  <th className="py-3.5 px-4">Portal Password</th>
+                  <th className="py-3.5 px-4">Account Security</th>
                   <th className="py-3.5 px-4">Designation & Role</th>
                   <th className="py-3.5 px-4">Teaching Allocations</th>
                   <th className="py-3.5 px-4">Status & Control</th>
@@ -795,8 +1006,6 @@ export default function PrincipalTeachersPage() {
                     .slice(0, 2)
                     .join("")
                     .toUpperCase();
-                  const isPasswordRevealed = revealedPasswords[t.id] || false;
-                  const passwordText = t.rawPassword || "Teacher2026!";
 
                   return (
                     <tr key={t.id} className="hover:bg-muted/30 transition-colors group">
@@ -830,45 +1039,58 @@ export default function PrincipalTeachersPage() {
                         </div>
                       </td>
 
-                      {/* Portal Password (Admin Can View & Copy) */}
+                      {/* Account Security & Password Reset */}
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5 bg-muted/50 border border-border/80 px-2.5 py-1.5 rounded-xl w-fit">
-                          <KeyRound className="h-3.5 w-3.5 text-seneca-amber shrink-0" />
-                          <span className="font-mono font-bold text-xs tracking-wider text-foreground">
-                            {isPasswordRevealed ? passwordText : "••••••••"}
-                          </span>
-                          <button
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1.5 rounded-xl">
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span className="font-mono font-bold text-[10px] text-emerald-700 dark:text-emerald-400">
+                              Bcrypt
+                            </span>
+                          </div>
+                          <Button
                             type="button"
-                            onClick={() => togglePasswordVisibility(t.id)}
-                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ml-1"
-                            title={isPasswordRevealed ? "Hide Password" : "Show Password"}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleResetTeacherPassword(t)}
+                            className="h-7 px-2 text-[10px] font-bold gap-1 rounded-lg border-seneca-amber/40 hover:bg-seneca-amber/10"
+                            title="Generate a new temporary password and copy to clipboard"
                           >
-                            {isPasswordRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(passwordText, "Password")}
-                            className="p-1 rounded-md text-muted-foreground hover:text-seneca-amber hover:bg-muted transition-colors"
-                            title="Copy Password"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
+                            <KeyRound className="h-3 w-3 text-seneca-amber" />
+                            <span>Reset</span>
+                          </Button>
                         </div>
                       </td>
 
-                      {/* Designation / Head of Class */}
+                      {/* Designation / Head of Class & Campus Wing */}
                       <td className="py-3 px-4">
                         <div className="space-y-1">
-                          {t.isClassHead ? (
-                            <Badge className="font-bold text-[10px] bg-amber-500/15 text-amber-700 dark:text-seneca-amber-light border-amber-500/30 gap-1">
-                              <Crown className="h-3 w-3 text-seneca-amber" />
-                              <span>Head of Class: {(t.headOfClassNames || []).join(", ") || "Assigned"}</span>
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="font-medium text-[10px] text-muted-foreground border-border">
-                              Subject Specialist
-                            </Badge>
-                          )}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {t.isClassHead ? (
+                              <Badge className="font-bold text-[10px] bg-amber-500/15 text-amber-700 dark:text-seneca-amber-light border-amber-500/30 gap-1">
+                                <Crown className="h-3 w-3 text-seneca-amber" />
+                                <span>Head of Class: {(t.headOfClassNames || []).join(", ") || "Assigned"}</span>
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="font-medium text-[10px] text-muted-foreground border-border">
+                                Subject Specialist
+                              </Badge>
+                            )}
+
+                            {isTeacherJunior(t) && isTeacherSenior(t) ? (
+                              <span className="px-1.5 py-0.2 rounded-md bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[9px] font-bold">
+                                Dual-Wing
+                              </span>
+                            ) : isTeacherJunior(t) ? (
+                              <span className="px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 text-[9px] font-bold">
+                                Junior Wing (≤ Gr 2)
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded-md bg-seneca-crimson/15 text-seneca-crimson dark:text-rose-400 border border-seneca-crimson/30 text-[9px] font-bold">
+                                Senior Wing (&gt; Gr 2)
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[10px] text-muted-foreground font-medium">
                             {t.specialization} • {t.qualification}
                           </div>
@@ -986,9 +1208,6 @@ export default function PrincipalTeachersPage() {
               .slice(0, 2)
               .join("")
               .toUpperCase();
-            const isPasswordRevealed = revealedPasswords[t.id] || false;
-            const passwordText = t.rawPassword || "Teacher2026!";
-
             return (
               <Card
                 key={t.id}
@@ -1027,6 +1246,25 @@ export default function PrincipalTeachersPage() {
                     </select>
                   </div>
 
+                  {/* Campus Wing Badge */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {isTeacherJunior(t) && isTeacherSenior(t) ? (
+                      <span className="px-2 py-0.5 rounded-lg bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+                        Dual-Wing Faculty
+                      </span>
+                    ) : isTeacherJunior(t) ? (
+                      <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        <span>Junior Wing (≤ Gr 2)</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-lg bg-seneca-crimson/15 text-seneca-crimson dark:text-rose-400 border border-seneca-crimson/30 text-[10px] font-bold flex items-center gap-1">
+                        <GraduationCap className="h-3 w-3" />
+                        <span>Senior Wing (&gt; Gr 2)</span>
+                      </span>
+                    )}
+                  </div>
+
                   {/* Head of Class Badge */}
                   {t.isClassHead ? (
                     <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center gap-1.5 text-xs">
@@ -1054,18 +1292,18 @@ export default function PrincipalTeachersPage() {
 
                     <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/40">
                       <span className="text-muted-foreground flex items-center gap-1">
-                        <KeyRound className="h-3 w-3 text-seneca-amber" />
-                        <span>Password:</span>
+                        <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                        <span>Security:</span>
                       </span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono font-bold text-foreground">
-                          {isPasswordRevealed ? passwordText : "••••••••"}
-                        </span>
-                        <button onClick={() => togglePasswordVisibility(t.id)} className="text-muted-foreground hover:text-foreground">
-                          {isPasswordRevealed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                        </button>
-                        <button onClick={() => copyToClipboard(passwordText, "Password")} className="text-muted-foreground hover:text-seneca-amber">
-                          <Copy className="h-3 w-3" />
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[10px] text-muted-foreground">Bcrypt Encrypted</span>
+                        <button
+                          onClick={() => handleResetTeacherPassword(t)}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-seneca-amber/10 text-seneca-amber hover:bg-seneca-amber/20 transition-colors flex items-center gap-1"
+                          title="Generate new temporary password"
+                        >
+                          <KeyRound className="h-3 w-3" />
+                          <span>Reset</span>
                         </button>
                       </div>
                     </div>
@@ -1531,29 +1769,21 @@ export default function PrincipalTeachersPage() {
 
                     <div className="p-2.5 rounded-xl bg-background border border-border flex items-center justify-between">
                       <div>
-                        <span className="text-[10px] text-muted-foreground block">Portal Password</span>
-                        <span className="font-mono font-bold text-foreground text-xs">
-                          {revealedPasswords[selectedTeacher.id] ? (selectedTeacher.rawPassword || "Teacher2026!") : "••••••••••••"}
+                        <span className="text-[10px] text-muted-foreground block">Portal Authentication</span>
+                        <span className="font-mono font-bold text-foreground text-xs flex items-center gap-1 text-emerald-600">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          <span>Encrypted (Bcrypt 12 Rounds)</span>
                         </span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          onClick={() => togglePasswordVisibility(selectedTeacher.id)}
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                        >
-                          {revealedPasswords[selectedTeacher.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </Button>
-                        <Button
-                          onClick={() => copyToClipboard(selectedTeacher.rawPassword || "Teacher2026!", "Password")}
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs text-seneca-amber"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      <Button
+                        onClick={() => handleResetTeacherPassword(selectedTeacher)}
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs text-seneca-amber border-seneca-amber/40 hover:bg-seneca-amber/10 font-bold gap-1.5"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                        <span>Issue Temporary Password</span>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1760,6 +1990,21 @@ export default function PrincipalTeachersPage() {
         variant="destructive"
         icon="trash"
         onConfirm={handleConfirmDeleteTeacher}
+      />
+
+      {/* Bulk CSV Import Modal */}
+      <CsvImportModal
+        isOpen={importCsvModalOpen}
+        onClose={() => setImportCsvModalOpen(false)}
+        title="Bulk Faculty Onboarding & Import"
+        description="Upload a CSV spreadsheet to bulk register faculty members, assign employee IDs, specify qualifications and academic specialties, and securely provision staff portal logins."
+        badgeLabel="Faculty Bulk Import"
+        templateFilename="Seneca_Faculty_Import_Template"
+        columns={TEACHER_IMPORT_COLUMNS}
+        sampleData={TEACHER_SAMPLE_DATA}
+        apiEndpoint="/api/teachers/import"
+        onSuccess={() => fetchTeachers()}
+        entityNamePlural="faculty members"
       />
     </div>
   );

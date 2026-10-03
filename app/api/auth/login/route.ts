@@ -16,14 +16,39 @@ export async function POST(req: NextRequest) {
       throw new ValidationError("Invalid login details.", parseResult.error.flatten().fieldErrors);
     }
 
-    const { email, password } = parseResult.data;
+    const { email, password, campusWing } = parseResult.data;
 
     await connectToDatabase();
 
-    // 1. Find user by lowercase email
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const normalizedEmail = email.toLowerCase().trim();
+    let queryEmail = normalizedEmail;
+    let effectiveWing = campusWing;
+
+    if (normalizedEmail === "principal.junior@seneca.edu.pk") {
+      effectiveWing = "junior";
+    } else if (normalizedEmail === "principal.senior@seneca.edu.pk") {
+      effectiveWing = "senior";
+    }
+
+    // 1. Find user by email, with alias fallback for specialized wing principals
+    let user = await User.findOne({ email: queryEmail });
+    if (
+      !user &&
+      (normalizedEmail === "principal.junior@seneca.edu.pk" ||
+        normalizedEmail === "principal.senior@seneca.edu.pk")
+    ) {
+      user =
+        (await User.findOne({ email: "principal@seneca.edu.pk" })) ||
+        (await User.findOne({ role: "principal" })) ||
+        (await User.findOne({ role: "super_admin" }));
+    }
+
     if (!user) {
       throw new AuthenticationError("Invalid email address or password.");
+    }
+
+    if (!effectiveWing && user.campusWing) {
+      effectiveWing = user.campusWing;
     }
 
     // 2. Check if account is active
@@ -51,16 +76,25 @@ export async function POST(req: NextRequest) {
       role: user.role,
       schoolId: user.schoolId.toString(),
       profileId: user.profileId?.toString(),
+      campusWing: effectiveWing || user.campusWing || "all",
     });
 
     // 6. Role-Based Redirection Engine:
-    // - Principal / Super Admin -> /dashboard (Management Dashboard)
+    // - Junior Principal -> /junior-portal
+    // - Senior Principal -> /senior-portal
+    // - Principal / Super Admin -> /dashboard (or wing portal if specified)
     // - Teacher -> /teacher (Faculty Portal)
     // - Student -> /student (Student Learning Portal)
     // - User -> / (Website Home Page)
     let redirectTo = "/";
     if (user.role === "super_admin" || user.role === "principal") {
-      redirectTo = "/dashboard";
+      if (effectiveWing === "junior") {
+        redirectTo = "/junior-portal";
+      } else if (effectiveWing === "senior") {
+        redirectTo = "/senior-portal";
+      } else {
+        redirectTo = "/dashboard";
+      }
     } else if (user.role === "teacher") {
       redirectTo = "/teacher";
     } else if (user.role === "student") {
@@ -77,6 +111,7 @@ export async function POST(req: NextRequest) {
           email: user.email,
           role: user.role,
           schoolId: user.schoolId.toString(),
+          campusWing: effectiveWing || "all",
         },
         redirectTo,
       },
@@ -90,6 +125,16 @@ export async function POST(req: NextRequest) {
       path: "/",
       maxAge: 7 * 24 * 60 * 60,
     });
+
+    if (effectiveWing) {
+      response.cookies.set("seneca_campus_wing", effectiveWing, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60,
+      });
+    }
 
     return response;
   } catch (error) {

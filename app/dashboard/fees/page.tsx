@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   CreditCard,
@@ -60,6 +60,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency, cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
+import { resolveClassWing } from "@/lib/constants/campus-wing";
 
 interface FeeVoucher {
   id: string;
@@ -169,6 +171,7 @@ interface BankAccountItem {
 }
 
 export default function PrincipalFeesPage() {
+  const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
   const [fees, setFees] = useState<FeeVoucher[]>([]);
   const [payments, setPayments] = useState<FeePaymentItem[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccountItem[]>([]);
@@ -253,6 +256,7 @@ export default function PrincipalFeesPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      if (activeWing !== "all") params.append("wing", activeWing);
       if (selectedStatus !== "all") params.append("status", selectedStatus);
       if (selectedClassId !== "all") params.append("classId", selectedClassId);
       if (selectedMonth !== "all") params.append("month", selectedMonth);
@@ -329,7 +333,7 @@ export default function PrincipalFeesPage() {
 
   useEffect(() => {
     fetchFees();
-  }, [selectedStatus, selectedClassId, selectedMonth]);
+  }, [selectedStatus, selectedClassId, selectedMonth, activeWing]);
 
   // Months set for dropdown filter
   const availableMonths = Array.from(new Set(fees.map((f) => f.month))).filter(Boolean);
@@ -522,8 +526,14 @@ export default function PrincipalFeesPage() {
     toast.success("Fee ledger exported to CSV!");
   };
 
-  // Filtered in-memory search
+  // Filtered in-memory search & campus wing
   const displayedFees = fees.filter((f) => {
+    // Campus portal wing filter
+    if (activeWing !== "all") {
+      const voucherWing = resolveClassWing(undefined, f.className || f.rawClassName);
+      if (voucherWing !== activeWing) return false;
+    }
+
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -536,10 +546,44 @@ export default function PrincipalFeesPage() {
     );
   });
 
+  // Dynamically compute summary for the active wing scope
+  const activeSummary = useMemo(() => {
+    if (activeWing === "all") return summary;
+    const totalBilled = displayedFees.reduce((acc, f) => acc + (f.totalAmount || 0), 0);
+    const totalCollected = displayedFees.reduce((acc, f) => acc + (f.paidAmount || 0), 0);
+    const totalPending = displayedFees.reduce(
+      (acc, f) => (f.status === "pending" || f.status === "partial" ? acc + (f.balanceAmount || 0) : acc),
+      0
+    );
+    const totalOverdue = displayedFees.reduce(
+      (acc, f) => (f.status === "overdue" ? acc + (f.balanceAmount || 0) : acc),
+      0
+    );
+    const collectionRate = totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 100) : 0;
+    const statusCounts = {
+      all: displayedFees.length,
+      paid: displayedFees.filter((f) => f.status === "paid").length,
+      partial: displayedFees.filter((f) => f.status === "partial").length,
+      pending: displayedFees.filter((f) => f.status === "pending").length,
+      overdue: displayedFees.filter((f) => f.status === "overdue").length,
+      under_review: displayedFees.filter((f) => f.status === "under_review").length,
+    };
+    return { totalBilled, totalCollected, totalPending, totalOverdue, collectionRate, statusCounts };
+  }, [summary, activeWing, displayedFees]);
+
   return (
     <div className="space-y-5 sm:space-y-8 animate-in fade-in-50 duration-300 w-full overflow-x-hidden pb-12">
       {/* 1. Header & Hero Metric Banner */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 bg-gradient-to-r from-seneca-crimson via-seneca-crimson-dark to-zinc-950 p-4 sm:p-8 text-white shadow-2xl">
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 p-4 sm:p-8 text-white shadow-2xl transition-all duration-300",
+          activeWing === "junior"
+            ? "seneca-junior-hero-gradient"
+            : activeWing === "senior"
+            ? "seneca-senior-hero-gradient"
+            : "seneca-hero-gradient"
+        )}
+      >
         <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-seneca-amber/20 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
@@ -547,7 +591,7 @@ export default function PrincipalFeesPage() {
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-seneca-amber-light border border-white/10">
                 <Landmark className="h-3 w-3" />
-                <span>Financial & Fee Operations</span>
+                <span>{wingConfig.name}</span>
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] sm:text-[11px] font-bold border border-emerald-500/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -559,7 +603,11 @@ export default function PrincipalFeesPage() {
               Fee Management & <span className="text-seneca-amber">Revenue Ledger</span>
             </h1>
             <p className="text-xs sm:text-sm text-white/80 max-w-2xl leading-relaxed">
-              Supervise class fee collections, issue 3-copy printable bank challans, automate class-wide billing batches, and record cash & online reconciliations.
+              {activeWing === "junior"
+                ? "Supervise Early Years and Primary fee collections, automated nursery/KG billing batches, 3-copy challans, and online receipt verifications."
+                : activeWing === "senior"
+                ? "Oversee Middle, Secondary (Matric/Cambridge), and Intermediate tuition fees, lab charges, admission installments, and treasury reconciliations."
+                : "Supervise class fee collections, issue 3-copy printable bank challans, automate class-wide billing batches, and record cash & online reconciliations."}
             </p>
           </div>
 
@@ -608,11 +656,11 @@ export default function PrincipalFeesPage() {
             </div>
           </div>
           <div className="text-base sm:text-2xl font-extrabold font-heading text-foreground truncate">
-            {formatCurrency(summary.totalBilled)}
+            {formatCurrency(activeSummary.totalBilled)}
           </div>
           <div className="text-[10px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
             <span>Total Challans:</span>
-            <span className="font-bold text-foreground">{summary.statusCounts.all} Vouchers</span>
+            <span className="font-bold text-foreground">{activeSummary.statusCounts.all} Vouchers</span>
           </div>
         </Card>
 
@@ -627,11 +675,11 @@ export default function PrincipalFeesPage() {
             </div>
           </div>
           <div className="text-base sm:text-2xl font-extrabold font-heading text-emerald-600 dark:text-emerald-400 truncate">
-            {formatCurrency(summary.totalCollected)}
+            {formatCurrency(activeSummary.totalCollected)}
           </div>
           <div className="text-[10px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
             <span>Verified Paid:</span>
-            <span className="font-bold text-emerald-600">{summary.statusCounts.paid} Settled</span>
+            <span className="font-bold text-emerald-600">{activeSummary.statusCounts.paid} Settled</span>
           </div>
         </Card>
 
@@ -646,11 +694,11 @@ export default function PrincipalFeesPage() {
             </div>
           </div>
           <div className="text-base sm:text-2xl font-extrabold font-heading text-foreground truncate">
-            {formatCurrency(summary.totalPending)}
+            {formatCurrency(activeSummary.totalPending)}
           </div>
           <div className="text-[10px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
             <span>Pending Roll:</span>
-            <span className="font-bold text-amber-600">{summary.statusCounts.pending} Vouchers</span>
+            <span className="font-bold text-amber-600">{activeSummary.statusCounts.pending} Vouchers</span>
           </div>
         </Card>
 
@@ -665,16 +713,16 @@ export default function PrincipalFeesPage() {
             </div>
           </div>
           <div className="text-base sm:text-2xl font-extrabold font-heading text-foreground flex items-baseline gap-1.5">
-            <span>{summary.collectionRate}%</span>
-            {summary.statusCounts.overdue > 0 && (
+            <span>{activeSummary.collectionRate}%</span>
+            {activeSummary.statusCounts.overdue > 0 && (
               <span className="text-[9px] font-bold text-rose-600 bg-rose-500/10 px-1 py-0.5 rounded">
-                {summary.statusCounts.overdue} Overdue
+                {activeSummary.statusCounts.overdue} Overdue
               </span>
             )}
           </div>
           <div className="text-[10px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
             <span>Overdue Amount:</span>
-            <span className="font-bold text-rose-600">{formatCurrency(summary.totalOverdue)}</span>
+            <span className="font-bold text-rose-600">{formatCurrency(activeSummary.totalOverdue)}</span>
           </div>
         </Card>
 
@@ -696,8 +744,8 @@ export default function PrincipalFeesPage() {
             </div>
           </div>
           <div className="text-base sm:text-2xl font-extrabold font-heading text-amber-600 dark:text-amber-400 truncate flex items-center gap-2">
-            <span>{summary.statusCounts.under_review || 0} Slips</span>
-            {(summary.statusCounts.under_review || 0) > 0 && (
+            <span>{activeSummary.statusCounts.under_review || 0} Slips</span>
+            {(activeSummary.statusCounts.under_review || 0) > 0 && (
               <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
             )}
           </div>
@@ -761,6 +809,26 @@ export default function PrincipalFeesPage() {
       {/* ========================================================================= */}
       {activeTab === "ledger" && (
         <div className="space-y-4">
+          {/* Institutional Wing Scope Indicator (Locked per Principal Portal) */}
+          {activeWing !== "all" && (
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-card border border-border/80 shadow-sm text-xs font-semibold text-muted-foreground w-fit">
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  activeWing === "junior" ? "bg-amber-500 animate-pulse" : "bg-seneca-crimson animate-pulse"
+                )}
+              />
+              <span>
+                Campus Portal Scope:{" "}
+                <strong className="text-foreground">
+                  {activeWing === "junior"
+                    ? "Junior Wing (Playgroup – Grade 2)"
+                    : "Senior Wing (Grade 3 – 12 / College)"}
+                </strong>
+              </span>
+            </div>
+          )}
+
           {/* Filter Toolbar */}
           <Card className="border border-border/80 bg-card/95 backdrop-blur-xl shadow-xl rounded-2xl p-3.5 sm:p-4 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 items-center">
@@ -942,9 +1010,22 @@ export default function PrincipalFeesPage() {
                         </td>
 
                         <td className="py-3 px-4">
-                          <Badge variant="outline" className="text-[10px] font-semibold bg-muted/50">
-                            {f.className}
-                          </Badge>
+                          <div className="space-y-0.5">
+                            <Badge variant="outline" className="text-[10px] font-semibold bg-muted/50">
+                              {f.className}
+                            </Badge>
+                            <div>
+                              {resolveClassWing(undefined, f.className || f.rawClassName) === "junior" ? (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                  Junior Wing
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-seneca-crimson/10 text-seneca-crimson dark:text-seneca-amber-light border border-seneca-crimson/20">
+                                  Senior Wing
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </td>
 
                         <td className="py-3 px-4 font-semibold text-foreground text-xs">{f.month}</td>

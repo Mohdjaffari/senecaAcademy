@@ -189,15 +189,15 @@ export default function TeacherExamMarksPage() {
         if (rowsMap.size > 0) {
           setStudentRows(Array.from(rowsMap.values()));
         } else {
-          setStudentRows(getFallbackExamStudents());
+          setStudentRows([]);
         }
       } else {
-        setStudentRows(getFallbackExamStudents());
-        setTeachingBooks(getFallbackBooks());
+        setStudentRows([]);
+        setTeachingBooks([]);
       }
     } catch (_) {
-      setStudentRows(getFallbackExamStudents());
-      setTeachingBooks(getFallbackBooks());
+      setStudentRows([]);
+      setTeachingBooks([]);
     } finally {
       setLoading(false);
     }
@@ -1019,42 +1019,4 @@ export default function TeacherExamMarksPage() {
       </Dialog>
     </div>
   );
-}
-
-// Fallback Mock Data in case database has no students yet
-function getFallbackExamStudents(): StudentExamRow[] {
-  return [
-    { id: "std-1", studentId: "std-1", name: "Ayan Tariq", rollNumber: "ROLL-07-01", admissionNumber: "SNC-2026-081", className: "Grade 7 Cambridge", theoryMarks: 71, practicalMarks: 24, remarks: REMARK_PRESETS[0] },
-    { id: "std-2", studentId: "std-2", name: "Zainab Fatima", rollNumber: "ROLL-07-02", admissionNumber: "SNC-2026-082", className: "Grade 7 Cambridge", theoryMarks: 74, practicalMarks: 25, remarks: REMARK_PRESETS[1] },
-    { id: "std-3", studentId: "std-3", name: "Mustafa Bilal", rollNumber: "ROLL-07-03", admissionNumber: "SNC-2026-083", className: "Grade 7 Cambridge", theoryMarks: 52, practicalMarks: 18, remarks: REMARK_PRESETS[5] },
-    { id: "std-4", studentId: "std-4", name: "Eshal Khurram", rollNumber: "ROLL-07-04", admissionNumber: "SNC-2026-084", className: "Grade 8 Cambridge", theoryMarks: 65, practicalMarks: 22, remarks: REMARK_PRESETS[2] },
-    { id: "std-5", studentId: "std-5", name: "Hamza Naveed", rollNumber: "ROLL-07-05", admissionNumber: "SNC-2026-085", className: "Grade 8 Cambridge", theoryMarks: 38, practicalMarks: 14, remarks: REMARK_PRESETS[6] },
-    { id: "std-6", studentId: "std-6", name: "Maryam Jahangir", rollNumber: "ROLL-07-06", admissionNumber: "SNC-2026-086", className: "Grade 9 O-Level", theoryMarks: 73, practicalMarks: 24, remarks: REMARK_PRESETS[0] },
-    { id: "std-7", studentId: "std-7", name: "Ibrahim Asif", rollNumber: "ROLL-07-07", admissionNumber: "SNC-2026-087", className: "Grade 7 Cambridge", theoryMarks: 61, practicalMarks: 20, remarks: REMARK_PRESETS[3] },
-    { id: "std-8", studentId: "std-8", name: "Dua Zahra", rollNumber: "ROLL-07-08", admissionNumber: "SNC-2026-088", className: "Grade 7 Cambridge", theoryMarks: 68, practicalMarks: 23, remarks: REMARK_PRESETS[3] },
-  ];
-}
-
-function getFallbackBooks(): TeachingBook[] {
-  return [
-    {
-      id: "b-1",
-      name: "Physics - Mechanics & Dynamics",
-      code: "PHY-701",
-      department: "Faculty of Natural Sciences",
-      enrolledStudentsCount: 28,
-      classes: [
-        { id: "cls-7a", name: "Grade 7 Cambridge (A)" },
-        { id: "cls-9a", name: "Grade 9 O-Level (A)" },
-      ],
-    },
-    {
-      id: "b-2",
-      name: "Advanced Mathematics",
-      code: "MATH-802",
-      department: "Faculty of Mathematics",
-      enrolledStudentsCount: 24,
-      classes: [{ id: "cls-8b", name: "Grade 8 Cambridge (B)" }],
-    },
-  ];
 }

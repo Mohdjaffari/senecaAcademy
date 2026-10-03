@@ -61,11 +61,27 @@ export default async function TeacherDashboardPage() {
     (c._id || c).toString()
   );
 
+  // Aggregate all classes where teacher is homeroom, class head, or assigned
+  const headedClasses = teacherProfile
+    ? await Class.find({
+        $or: [
+          { classTeacherId: teacherProfile._id },
+          { _id: { $in: teacherProfile.headOfClassIds || [] } },
+        ],
+        status: "active",
+      }).lean()
+    : [];
+
+  const headClassIds = headedClasses.map((c: any) => c._id.toString());
+  const allTeacherClassIds = Array.from(
+    new Set([...assignedClassIds, ...headClassIds])
+  );
+
   // 2. Fetch assigned teaching books
   let subjects = await Subject.find({
     $or: [
       { _id: { $in: assignedSubjectIds } },
-      ...(assignedClassIds.length > 0 ? [{ classIds: { $in: assignedClassIds } }] : []),
+      ...(allTeacherClassIds.length > 0 ? [{ classIds: { $in: allTeacherClassIds } }] : []),
     ],
   })
     .populate("classIds", "name section gradeLevel stream")
@@ -106,7 +122,7 @@ export default async function TeacherDashboardPage() {
     userDoc,
   ] = await Promise.all([
     Student.find({
-      ...(assignedClassIds.length > 0 ? { classId: { $in: assignedClassIds } } : {}),
+      ...(allTeacherClassIds.length > 0 ? { classId: { $in: allTeacherClassIds } } : {}),
       status: "active",
     })
       .populate("userId", "name email phone avatarUrl")
@@ -157,7 +173,7 @@ export default async function TeacherDashboardPage() {
       .limit(4)
       .lean(),
     Attendance.find({
-      ...(assignedClassIds.length > 0 ? { classId: { $in: assignedClassIds } } : {}),
+      ...(allTeacherClassIds.length > 0 ? { classId: { $in: allTeacherClassIds } } : {}),
     })
       .sort({ date: -1 })
       .limit(30)

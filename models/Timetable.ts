@@ -50,7 +50,7 @@ TimetableSchema.index({ schoolId: 1, teacherId: 1, dayOfWeek: 1, periodNumber: 1
 // Prevent same class having 2 different periods at the same time
 TimetableSchema.index({ schoolId: 1, classId: 1, dayOfWeek: 1, periodNumber: 1 });
 
-if (mongoose.models && mongoose.models.Timetable) {
+if (process.env.NODE_ENV !== "production" && mongoose.models && mongoose.models.Timetable) {
   delete mongoose.models.Timetable;
 }
 
