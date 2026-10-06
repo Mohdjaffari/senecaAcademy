@@ -67,7 +67,6 @@ import { CLASS_IMPORT_COLUMNS, CLASS_SAMPLE_DATA } from "@/lib/utils/csv-helper"
 import {
   ACADEMIC_SPECTRUM,
   ACADEMIC_TIERS,
-  STREAM_OPTIONS_BY_TIER,
   AVAILABLE_SECTIONS,
   WINGS,
   AcademicGrade,
@@ -796,8 +795,17 @@ export default function PrincipalClassesPage() {
       if (tierMatches.length > 0) return tierMatches.map((s) => s.name);
       return activeStreams.map((s) => s.name);
     }
-    return STREAM_OPTIONS_BY_TIER[selectedTier] || STREAM_OPTIONS_BY_TIER["Primary"];
+    return [];
   })();
+
+  // Synchronize formStream to first available database track if empty or unaligned
+  useEffect(() => {
+    if (availableStreamsForCurrentTier.length > 0) {
+      if (!formStream || !availableStreamsForCurrentTier.includes(formStream)) {
+        setFormStream(availableStreamsForCurrentTier[0]);
+      }
+    }
+  }, [availableStreamsForCurrentTier, selectedTier]);
 
   return (
     <div className="space-y-5 sm:space-y-8 animate-in fade-in-50 duration-300 w-full overflow-x-hidden">
@@ -1680,10 +1688,10 @@ export default function PrincipalClassesPage() {
             <div>
               <h3 className="text-base sm:text-lg font-bold font-heading text-foreground flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-seneca-crimson" />
-                <span>Curriculum Tracks & Academic Streams (Live Database)</span>
+                <span>Academic Specializations & Study Tracks</span>
               </h3>
               <p className="text-xs text-muted-foreground">
-                Manage specialized academic tracks across all tiers (Pre-Medical, Pre-Engineering, ICS, I.Com, Matric Science, Cambridge CAIE) stored in MongoDB.
+                Manage specialized academic disciplines across all tiers (Pre-Medical, Pre-Engineering, ICS, I.Com, Matric Science, Cambridge CAIE) stored in MongoDB.
               </p>
             </div>
             <Button
@@ -2214,21 +2222,40 @@ export default function PrincipalClassesPage() {
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Academic Stream */}
+                {/* Academic Specialization & Study Track (100% Database Driven) */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">
-                    Academic Stream / Curriculum Track <span className="text-seneca-crimson">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-foreground">
+                      Academic Specialization & Study Track <span className="text-seneca-crimson">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleOpenCreateStreamModal}
+                      className="text-[10px] font-bold text-seneca-crimson hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="h-3 w-3" /> + Add Track
+                    </button>
+                  </div>
                   <select
                     value={formStream}
                     onChange={(e) => setFormStream(e.target.value)}
                     className="h-11 w-full px-3.5 rounded-xl bg-background border border-border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-seneca-crimson/30 transition-all text-foreground"
                   >
-                    {availableStreamsForCurrentTier.map((st) => (
-                      <option key={st} value={st}>
-                        {st}
+                    {loadingStreams ? (
+                      <option value="" disabled>
+                        Syncing database specializations...
                       </option>
-                    ))}
+                    ) : availableStreamsForCurrentTier.length > 0 ? (
+                      availableStreamsForCurrentTier.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="" disabled>
+                        No specializations registered in database for {selectedTier}. Click &quot;+ Add Track&quot; above.
+                      </option>
+                    )}
                   </select>
                 </div>
 

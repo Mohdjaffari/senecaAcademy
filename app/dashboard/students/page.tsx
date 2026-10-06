@@ -92,8 +92,6 @@ import {
 
 import {
   ACADEMIC_SPECTRUM,
-  STREAM_OPTIONS_BY_TIER,
-  ALL_STREAM_OPTIONS,
   AcademicGrade,
 } from "@/lib/constants/academic-spectrum";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -604,7 +602,7 @@ export default function PrincipalStudentsPage() {
   const [formClassName, setFormClassName] = useState("Grade 1");
   const [formSection, setFormSection] = useState("A");
   const [selectedClassId, setSelectedClassId] = useState<string>("");
-  const [formStream, setFormStream] = useState("General Curriculum (National Standards)");
+  const [formStream, setFormStream] = useState("");
   const [formAdmissionNumber, setFormAdmissionNumber] = useState("");
   const [formRollNumber, setFormRollNumber] = useState("");
   const [formFeeCategory, setFormFeeCategory] = useState("Standard");
@@ -812,13 +810,23 @@ export default function PrincipalStudentsPage() {
         (s) => s.tier === currentSelectedTier || s.tier === "All"
       );
       if (tierMatches.length > 0) {
-        return tierMatches.map((s) => s.name);
+        return tierMatches;
       }
-      return activeStreams.map((s) => s.name);
+      return activeStreams;
     }
-    // Fallback while streams are loading initially from database
-    return STREAM_OPTIONS_BY_TIER[currentSelectedTier] || ALL_STREAM_OPTIONS;
+    return [];
   })();
+
+  // Auto-align formStream with available database tracks
+  useEffect(() => {
+    if (currentAvailableStreams.length > 0) {
+      const exists = currentAvailableStreams.some((s) => s.name === formStream);
+      if (!exists && !formStream) {
+        const defaultStream = currentAvailableStreams.find((s) => s.isDefault) || currentAvailableStreams[0];
+        setFormStream(defaultStream.name);
+      }
+    }
+  }, [currentAvailableStreams, formStream]);
 
   // Auto-generate IDs and Portal Email
   // Auto-generate IDs and Portal Email
@@ -1473,7 +1481,7 @@ export default function PrincipalStudentsPage() {
     setFormClassName(defaultGrade);
     setFormSection(defaultSection);
     setSelectedClassId(defaultClassId);
-    setFormStream(dbClasses.length > 0 && dbClasses[0].stream ? dbClasses[0].stream : "General Curriculum (National Standards)");
+    setFormStream(dbClasses.length > 0 && dbClasses[0].stream ? dbClasses[0].stream : "");
     setFormFeeCategory("Standard");
     generateUniqueStudentIDs(defaultGrade, defaultSection);
 
@@ -3113,12 +3121,12 @@ export default function PrincipalStudentsPage() {
                     )}
                   </div>
 
-                  {/* Academic Stream (Live Database Sourced) */}
+                  {/* Academic Specialization & Study Track (100% Live Database) */}
                   <div className="space-y-1.5 pt-1">
                     <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
                         <Sparkles className="h-3.5 w-3.5 text-seneca-crimson shrink-0" />
-                        <span>Academic Stream / Curriculum Track (Live Database)</span>
+                        <span>Academic Specialization & Study Track</span>
                         <span className="text-seneca-crimson">*</span>
                       </label>
                       <div className="flex items-center gap-2">
@@ -3128,7 +3136,7 @@ export default function PrincipalStudentsPage() {
                           </span>
                         ) : (
                           <Badge variant="outline" className="text-[9px] font-bold text-emerald-600 bg-emerald-500/5 border-emerald-500/20">
-                            ✓ {currentAvailableStreams.length} Tracks in Database
+                            ✓ {currentAvailableStreams.length} Registered Tracks
                           </Badge>
                         )}
                         <button
@@ -3140,9 +3148,9 @@ export default function PrincipalStudentsPage() {
                             setNewStreamDescription("");
                             setCreateStreamModalOpen(true);
                           }}
-                          className="text-[10px] font-bold text-seneca-crimson hover:text-seneca-crimson/80 flex items-center gap-1 px-2 py-0.5 rounded-md bg-seneca-crimson/10 border border-seneca-crimson/20 hover:bg-seneca-crimson/15 transition-all cursor-pointer"
+                          className="text-[10px] font-bold text-seneca-crimson hover:text-seneca-crimson/80 flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-seneca-crimson/10 border border-seneca-crimson/20 hover:bg-seneca-crimson/15 transition-all cursor-pointer shadow-xs"
                         >
-                          <Plus className="h-3 w-3" /> + Add Stream
+                          <Plus className="h-3 w-3" /> + Add Track
                         </button>
                       </div>
                     </div>
@@ -3151,21 +3159,39 @@ export default function PrincipalStudentsPage() {
                       onChange={(e) => setFormStream(e.target.value)}
                       className="h-11 w-full px-3.5 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none transition-all cursor-pointer shadow-xs"
                     >
-                      {currentAvailableStreams.map((st) => (
-                        <option key={st} value={st}>
-                          {st}
+                      {loadingStreams ? (
+                        <option value="" disabled>
+                          Syncing database specializations...
                         </option>
-                      ))}
-                      {/* Ensure current formStream is kept if custom or assigned */}
-                      {formStream && !currentAvailableStreams.includes(formStream) && (
-                        <option value={formStream}>{formStream}</option>
+                      ) : currentAvailableStreams.length > 0 ? (
+                        <>
+                          <option value="" disabled>
+                            -- Select Academic Specialization --
+                          </option>
+                          {currentAvailableStreams.map((st) => (
+                            <option key={st.id || st._id || st.name} value={st.name}>
+                              {st.name}{st.code ? ` (${st.code})` : ""}
+                            </option>
+                          ))}
+                          {formStream && !currentAvailableStreams.some((st) => st.name === formStream) && (
+                            <option value={formStream}>{formStream} (Assigned)</option>
+                          )}
+                        </>
+                      ) : (
+                        <option value="" disabled>
+                          No specializations registered in database for {currentSelectedTier}. Click &quot;+ Add Track&quot; above.
+                        </option>
                       )}
                     </select>
                     <div className="flex flex-wrap items-center justify-between text-[10px] text-muted-foreground pt-0.5 gap-2">
-                      <span>Curriculum track automatically tailored to {formClassName} ({currentSelectedTier}).</span>
-                      {formStream && (
+                      <span>Curriculum specialization aligned with {formClassName} ({currentSelectedTier}).</span>
+                      {formStream ? (
                         <span className="font-semibold text-foreground/80">
-                          Active: <span className="text-seneca-crimson font-bold">{formStream}</span>
+                          Selected Track: <span className="text-seneca-crimson font-bold">{formStream}</span>
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">
+                          Please select a specialization track
                         </span>
                       )}
                     </div>
@@ -4563,23 +4589,23 @@ export default function PrincipalStudentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Quick Add Academic Stream to Live Database Dialog */}
+      {/* Quick Add Academic Specialization to Live Database Dialog */}
       <Dialog open={createStreamModalOpen} onOpenChange={setCreateStreamModalOpen}>
         <DialogContent className="w-[calc(100vw-1rem)] sm:w-full max-w-md rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-2xl p-5 sm:p-6">
           <DialogHeader className="border-b border-border/60 pb-3">
             <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
               <Sparkles className="h-5 w-5 text-seneca-crimson shrink-0" />
-              <span>Add Academic Stream to Database</span>
+              <span>Add Academic Specialization to Database</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground pt-1">
-              Create a new curriculum track or academic specialization saved directly to MongoDB. It will instantly be available in the live enrollment dropdown.
+              Create a new curriculum track or academic specialization saved directly to MongoDB. It will instantly appear in the live enrollment dropdown.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateNewStream} className="space-y-4 py-3">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-foreground flex items-center justify-between">
-                <span>Stream / Track Title <span className="text-seneca-crimson">*</span></span>
+                <span>Specialization Title / Study Track <span className="text-seneca-crimson">*</span></span>
                 <span className="text-[10px] text-muted-foreground font-normal">e.g. FSc Pre-Medical, ICS, Cambridge</span>
               </label>
               <Input

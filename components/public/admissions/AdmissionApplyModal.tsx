@@ -55,11 +55,7 @@ import {
   validators,
   REGEX_PATTERNS,
 } from "@/lib/utils/student-validation";
-import {
-  ACADEMIC_SPECTRUM,
-  STREAM_OPTIONS_BY_TIER,
-  ALL_STREAM_OPTIONS,
-} from "@/lib/constants/academic-spectrum";
+import { ACADEMIC_SPECTRUM } from "@/lib/constants/academic-spectrum";
 
 interface AdmissionApplyModalProps {
   open: boolean;
@@ -1108,7 +1104,7 @@ export function AdmissionApplyModal({
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-foreground flex items-center justify-between">
                           <span>
-                            Academic Group <span className="text-seneca-crimson">*</span>
+                            Academic Specialization & Study Track <span className="text-seneca-crimson">*</span>
                           </span>
                           {loadingOptions && (
                             <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-normal">
@@ -1139,7 +1135,7 @@ export function AdmissionApplyModal({
                           })()}
                         </select>
                         <p className="text-[10px] text-muted-foreground">
-                          Curriculum track & department stream.
+                          Curriculum specialization and study track.
                         </p>
                       </div>
                     </div>
