@@ -151,6 +151,18 @@ export interface StudentAcademicHistoryItem {
   promotedByName?: string;
 }
 
+export interface AcademicStreamItem {
+  id: string;
+  _id?: string;
+  name: string;
+  code?: string;
+  tier: string;
+  description?: string;
+  status: "active" | "archived" | "inactive";
+  isDefault?: boolean;
+  order?: number;
+}
+
 interface StudentData {
   id: string;
   name: string;
@@ -701,6 +713,78 @@ export default function PrincipalStudentsPage() {
     }
   };
 
+  // Academic Streams State (Live Database Sourced)
+  const [dbStreams, setDbStreams] = useState<AcademicStreamItem[]>([]);
+  const [loadingStreams, setLoadingStreams] = useState(false);
+  const [createStreamModalOpen, setCreateStreamModalOpen] = useState(false);
+  const [newStreamName, setNewStreamName] = useState("");
+  const [newStreamTier, setNewStreamTier] = useState("Higher Secondary");
+  const [newStreamCode, setNewStreamCode] = useState("");
+  const [newStreamDescription, setNewStreamDescription] = useState("");
+  const [savingNewStream, setSavingNewStream] = useState(false);
+
+  // Fetch Academic Streams directly from MongoDB database (real-time live database)
+  const fetchAcademicStreams = async () => {
+    setLoadingStreams(true);
+    try {
+      const res = await fetch("/api/academic-streams", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data?.streams)) {
+        setDbStreams(data.data.streams);
+      } else {
+        setDbStreams([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch database academic streams:", err);
+      setDbStreams([]);
+    } finally {
+      setLoadingStreams(false);
+    }
+  };
+
+  const handleCreateNewStream = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newStreamName.trim()) {
+      toast.error("Please enter a stream name / curriculum track title");
+      return;
+    }
+    setSavingNewStream(true);
+    try {
+      const res = await fetch("/api/academic-streams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newStreamName.trim(),
+          tier: newStreamTier || currentSelectedTier,
+          code: newStreamCode.trim(),
+          description: newStreamDescription.trim(),
+          status: "active",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success("Academic stream added to database!", {
+          description: `"${newStreamName.trim()}" is now available in live enrollment.`,
+        });
+        const createdStream = data.data.stream;
+        setDbStreams((prev) => [createdStream, ...prev]);
+        setFormStream(createdStream.name);
+        setCreateStreamModalOpen(false);
+        setNewStreamName("");
+        setNewStreamCode("");
+        setNewStreamDescription("");
+      } else {
+        toast.error("Failed to add stream", {
+          description: data.error || data.message || "An error occurred.",
+        });
+      }
+    } catch (err: any) {
+      toast.error("Error creating stream", { description: err.message });
+    } finally {
+      setSavingNewStream(false);
+    }
+  };
+
   // Compute available grades from database (or spectrum)
   const availableGradeNames = (() => {
     if (dbClasses.length > 0) {
@@ -720,8 +804,21 @@ export default function PrincipalStudentsPage() {
     return matched?.tier || "Primary";
   })();
 
-  const currentAvailableStreams =
-    STREAM_OPTIONS_BY_TIER[currentSelectedTier] || ALL_STREAM_OPTIONS;
+  // Dynamically compute streams from Live Database for current tier (or All tiers)
+  const currentAvailableStreams = (() => {
+    if (dbStreams.length > 0) {
+      const activeStreams = dbStreams.filter((s) => s.status === "active");
+      const tierMatches = activeStreams.filter(
+        (s) => s.tier === currentSelectedTier || s.tier === "All"
+      );
+      if (tierMatches.length > 0) {
+        return tierMatches.map((s) => s.name);
+      }
+      return activeStreams.map((s) => s.name);
+    }
+    // Fallback while streams are loading initially from database
+    return STREAM_OPTIONS_BY_TIER[currentSelectedTier] || ALL_STREAM_OPTIONS;
+  })();
 
   // Auto-generate IDs and Portal Email
   // Auto-generate IDs and Portal Email
@@ -1367,6 +1464,7 @@ export default function PrincipalStudentsPage() {
   const handleOpenEnrollModal = () => {
     fetchClasses();
     fetchDepartments();
+    fetchAcademicStreams();
     const defaultGrade = dbClasses.length > 0 ? dbClasses[0].name : "Grade 1";
     const defaultSection = dbClasses.length > 0 ? dbClasses[0].section : "A";
     const defaultClassId = dbClasses.length > 0 ? dbClasses[0].id : "";
@@ -1519,6 +1617,7 @@ export default function PrincipalStudentsPage() {
     fetchStudents();
     fetchClasses();
     fetchDepartments();
+    fetchAcademicStreams();
   }, []);
 
   // Filter students
@@ -1807,6 +1906,7 @@ export default function PrincipalStudentsPage() {
       setEnrollModalOpen(false);
       fetchStudents(true);
       fetchClasses();
+      fetchAcademicStreams();
 
       // Reset form
       setFormName("");
@@ -3013,25 +3113,62 @@ export default function PrincipalStudentsPage() {
                     )}
                   </div>
 
-                  {/* Academic Stream */}
-                  <div className="space-y-1 pt-1">
-                    <label className="text-xs font-bold text-foreground">
-                      Academic Stream / Curriculum Track <span className="text-seneca-crimson">*</span>
-                    </label>
+                  {/* Academic Stream (Live Database Sourced) */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-seneca-crimson shrink-0" />
+                        <span>Academic Stream / Curriculum Track (Live Database)</span>
+                        <span className="text-seneca-crimson">*</span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {loadingStreams ? (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin text-seneca-crimson" /> Syncing DB...
+                          </span>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] font-bold text-emerald-600 bg-emerald-500/5 border-emerald-500/20">
+                            ✓ {currentAvailableStreams.length} Tracks in Database
+                          </Badge>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewStreamTier(currentSelectedTier);
+                            setNewStreamName("");
+                            setNewStreamCode("");
+                            setNewStreamDescription("");
+                            setCreateStreamModalOpen(true);
+                          }}
+                          className="text-[10px] font-bold text-seneca-crimson hover:text-seneca-crimson/80 flex items-center gap-1 px-2 py-0.5 rounded-md bg-seneca-crimson/10 border border-seneca-crimson/20 hover:bg-seneca-crimson/15 transition-all cursor-pointer"
+                        >
+                          <Plus className="h-3 w-3" /> + Add Stream
+                        </button>
+                      </div>
+                    </div>
                     <select
                       value={formStream}
                       onChange={(e) => setFormStream(e.target.value)}
-                      className="h-11 w-full px-3.5 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none"
+                      className="h-11 w-full px-3.5 rounded-xl bg-background border border-border text-xs font-bold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none transition-all cursor-pointer shadow-xs"
                     >
                       {currentAvailableStreams.map((st) => (
                         <option key={st} value={st}>
                           {st}
                         </option>
                       ))}
+                      {/* Ensure current formStream is kept if custom or assigned */}
+                      {formStream && !currentAvailableStreams.includes(formStream) && (
+                        <option value={formStream}>{formStream}</option>
+                      )}
                     </select>
-                    <p className="text-[10px] text-muted-foreground">
-                      Curriculum track automatically tailored to {formClassName} ({currentSelectedTier}).
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between text-[10px] text-muted-foreground pt-0.5 gap-2">
+                      <span>Curriculum track automatically tailored to {formClassName} ({currentSelectedTier}).</span>
+                      {formStream && (
+                        <span className="font-semibold text-foreground/80">
+                          Active: <span className="text-seneca-crimson font-bold">{formStream}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -4422,6 +4559,112 @@ export default function PrincipalStudentsPage() {
                 )}
               </div>
             </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Add Academic Stream to Live Database Dialog */}
+      <Dialog open={createStreamModalOpen} onOpenChange={setCreateStreamModalOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] sm:w-full max-w-md rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-2xl p-5 sm:p-6">
+          <DialogHeader className="border-b border-border/60 pb-3">
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <Sparkles className="h-5 w-5 text-seneca-crimson shrink-0" />
+              <span>Add Academic Stream to Database</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              Create a new curriculum track or academic specialization saved directly to MongoDB. It will instantly be available in the live enrollment dropdown.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateNewStream} className="space-y-4 py-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>Stream / Track Title <span className="text-seneca-crimson">*</span></span>
+                <span className="text-[10px] text-muted-foreground font-normal">e.g. FSc Pre-Medical, ICS, Cambridge</span>
+              </label>
+              <Input
+                required
+                placeholder="e.g. Artificial Intelligence & Robotics Track"
+                value={newStreamName}
+                onChange={(e) => setNewStreamName(e.target.value)}
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">
+                  Applicable Grade Tier <span className="text-seneca-crimson">*</span>
+                </label>
+                <select
+                  value={newStreamTier}
+                  onChange={(e) => setNewStreamTier(e.target.value)}
+                  className="h-10 w-full px-3 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none"
+                >
+                  <option value="Higher Secondary">Higher Secondary / College</option>
+                  <option value="Secondary">Secondary / Matric</option>
+                  <option value="Middle">Middle Wing</option>
+                  <option value="Primary">Primary Wing</option>
+                  <option value="Preschool">Preschool / Early Years</option>
+                  <option value="All">All Grade Levels</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                  <span>Stream Code</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+                </label>
+                <Input
+                  placeholder="e.g. AI-ROB"
+                  value={newStreamCode}
+                  onChange={(e) => setNewStreamCode(e.target.value)}
+                  className="h-10 text-xs rounded-xl uppercase"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>Description & Focus Areas</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+              </label>
+              <Input
+                placeholder="e.g. Programming, Machine Learning, Applied Mathematics"
+                value={newStreamDescription}
+                onChange={(e) => setNewStreamDescription(e.target.value)}
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <DialogFooter className="pt-2 flex flex-row items-center justify-end gap-2 border-t border-border/60">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateStreamModalOpen(false)}
+                disabled={savingNewStream}
+                className="rounded-xl text-xs font-bold h-9"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={savingNewStream || !newStreamName.trim()}
+                className="bg-seneca-crimson hover:bg-seneca-crimson/90 text-white font-bold text-xs rounded-xl h-9 shadow-sm"
+              >
+                {savingNewStream ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Saving to DB...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Save Stream to DB
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

@@ -3,15 +3,21 @@ import connectToDatabase from "@/lib/db/mongodb";
 import Class from "@/models/Class";
 import Department from "@/models/Department";
 import School from "@/models/School";
+import AcademicStream from "@/models/AcademicStream";
 import AdmissionsPage from "@/models/AdmissionsPage";
 import { apiSuccess, apiError } from "@/lib/utils/api-response";
 import { DEFAULT_ADMISSIONS_PAGE_DATA } from "@/lib/db/admissions-page-defaults";
+import { ensureDefaultAcademicStreams } from "@/lib/db/academic-streams-defaults";
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
 
     const school = (await School.findOne({ status: "active" })) || (await School.findOne({}));
+
+    if (school) {
+      await ensureDefaultAcademicStreams(school._id);
+    }
 
     const query: any = { status: "active" };
     if (school) {
@@ -55,6 +61,17 @@ export async function GET(req: NextRequest) {
 
     // Extract all distinct streams / groups
     const groupSet = new Set<string>();
+
+    // 3. Fetch academic streams from AcademicStream collection
+    const dbStreams = await AcademicStream.find(query)
+      .sort({ order: 1, name: 1 })
+      .lean();
+
+    for (const st of dbStreams) {
+      if (st.name && st.name.trim()) {
+        groupSet.add(st.name.trim());
+      }
+    }
 
     // Add groups from Departments
     for (const d of departments) {

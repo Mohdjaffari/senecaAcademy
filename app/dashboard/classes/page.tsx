@@ -87,6 +87,22 @@ interface DepartmentData {
   createdAt: string;
 }
 
+export interface AcademicStreamData {
+  id: string;
+  _id?: string;
+  name: string;
+  code?: string;
+  tier: "Preschool" | "Primary" | "Middle" | "Secondary" | "Higher Secondary" | "All";
+  description?: string;
+  status: "active" | "archived" | "inactive";
+  isDefault?: boolean;
+  order?: number;
+  classCount?: number;
+  studentCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface AllocatedSubject {
   id: string;
   name: string;
@@ -142,7 +158,7 @@ interface TeacherOption {
 
 export default function PrincipalClassesPage() {
   const { activeWing, setCampusWing, wingConfig } = useCampusPortal();
-  const [activeTab, setActiveTab] = useState<"classes" | "allocations" | "departments" | "wizard">("classes");
+  const [activeTab, setActiveTab] = useState<"classes" | "allocations" | "departments" | "streams" | "wizard">("classes");
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [departments, setDepartments] = useState<DepartmentData[]>([]);
   const [teachersList, setTeachersList] = useState<TeacherOption[]>([]);
@@ -152,6 +168,25 @@ export default function PrincipalClassesPage() {
   const [selectedWing, setSelectedWing] = useState("all");
   const [selectedDeptFilter, setSelectedDeptFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+
+  // Academic Streams State (Database Driven)
+  const [streams, setStreams] = useState<AcademicStreamData[]>([]);
+  const [loadingStreams, setLoadingStreams] = useState(false);
+  const [streamSearch, setStreamSearch] = useState("");
+  const [streamTierFilter, setStreamTierFilter] = useState("all");
+  const [streamStatusFilter, setStreamStatusFilter] = useState("all");
+  const [createStreamModalOpen, setCreateStreamModalOpen] = useState(false);
+  const [editingStream, setEditingStream] = useState<AcademicStreamData | null>(null);
+  const [streamToDelete, setStreamToDelete] = useState<AcademicStreamData | null>(null);
+  const [savingStream, setSavingStream] = useState(false);
+
+  // Standalone Stream Form State
+  const [streamFormName, setStreamFormName] = useState("");
+  const [streamFormCode, setStreamFormCode] = useState("");
+  const [streamFormTier, setStreamFormTier] = useState<"Preschool" | "Primary" | "Middle" | "Secondary" | "Higher Secondary" | "All">("Higher Secondary");
+  const [streamFormDescription, setStreamFormDescription] = useState("");
+  const [streamFormStatus, setStreamFormStatus] = useState<"active" | "archived" | "inactive">("active");
+  const [streamFormIsDefault, setStreamFormIsDefault] = useState(false);
 
   // Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -264,10 +299,29 @@ export default function PrincipalClassesPage() {
     }
   };
 
+  const fetchAcademicStreams = async (silent = false) => {
+    if (!silent) setLoadingStreams(true);
+    try {
+      const res = await fetch("/api/academic-streams?status=all", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data?.streams)) {
+        setStreams(data.data.streams);
+      } else {
+        setStreams([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch academic streams:", err);
+      setStreams([]);
+    } finally {
+      if (!silent) setLoadingStreams(false);
+    }
+  };
+
   useEffect(() => {
     fetchClasses();
     fetchDepartments();
     fetchTeachers();
+    fetchAcademicStreams();
   }, []);
 
   // Filter classes
@@ -547,6 +601,105 @@ export default function PrincipalClassesPage() {
     }
   };
 
+  // Academic Stream Add / Edit / Delete Handlers
+  const handleOpenCreateStreamModal = () => {
+    setEditingStream(null);
+    setStreamFormName("");
+    setStreamFormCode("");
+    setStreamFormTier("Higher Secondary");
+    setStreamFormDescription("");
+    setStreamFormStatus("active");
+    setStreamFormIsDefault(false);
+    setCreateStreamModalOpen(true);
+  };
+
+  const handleOpenEditStreamModal = (st: AcademicStreamData) => {
+    setEditingStream(st);
+    setStreamFormName(st.name);
+    setStreamFormCode(st.code || "");
+    setStreamFormTier(st.tier);
+    setStreamFormDescription(st.description || "");
+    setStreamFormStatus(st.status);
+    setStreamFormIsDefault(!!st.isDefault);
+    setCreateStreamModalOpen(true);
+  };
+
+  const handleCreateOrEditStreamSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!streamFormName.trim()) {
+      toast.error("Please enter a stream name / track title.");
+      return;
+    }
+    setSavingStream(true);
+    try {
+      const payload = {
+        name: streamFormName.trim(),
+        tier: streamFormTier,
+        code: streamFormCode.trim(),
+        description: streamFormDescription.trim(),
+        status: streamFormStatus,
+        isDefault: streamFormIsDefault,
+      };
+
+      let res;
+      if (editingStream) {
+        res = await fetch(`/api/academic-streams/${editingStream.id || editingStream._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch("/api/academic-streams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || data.error || data.message || "Failed to save stream.");
+      }
+
+      toast.success(editingStream ? "Academic Stream Updated!" : "Academic Stream Created!", {
+        description: `"${streamFormName.trim()}" is saved in the database.`,
+      });
+
+      setCreateStreamModalOpen(false);
+      setEditingStream(null);
+      fetchAcademicStreams(true);
+    } catch (err: any) {
+      toast.error("Operation Failed", { description: err.message });
+    } finally {
+      setSavingStream(false);
+    }
+  };
+
+  const handleDeleteStream = (st: AcademicStreamData) => {
+    setStreamToDelete(st);
+  };
+
+  const handleConfirmDeleteStream = async () => {
+    if (!streamToDelete) return;
+    const st = streamToDelete;
+    try {
+      const res = await fetch(`/api/academic-streams/${st.id || st._id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || data.error || "Failed to remove stream.");
+      }
+      toast.success("Stream Status Updated", {
+        description: data.message || `Stream "${st.name}" processed.`,
+      });
+      setStreamToDelete(null);
+      fetchAcademicStreams(true);
+    } catch (err: any) {
+      toast.error("Deletion Failed", { description: err.message });
+    }
+  };
+
   // Batch Wizard handlers
   const toggleWizardRow = (idx: number) => {
     setWizardRows((prev) =>
@@ -634,8 +787,17 @@ export default function PrincipalClassesPage() {
     toast.success("Academic roster exported to CSV!");
   };
 
-  const availableStreamsForCurrentTier =
-    STREAM_OPTIONS_BY_TIER[selectedTier] || STREAM_OPTIONS_BY_TIER["Primary"];
+  const availableStreamsForCurrentTier = (() => {
+    if (streams.length > 0) {
+      const activeStreams = streams.filter((s) => s.status === "active");
+      const tierMatches = activeStreams.filter(
+        (s) => s.tier === selectedTier || s.tier === "All"
+      );
+      if (tierMatches.length > 0) return tierMatches.map((s) => s.name);
+      return activeStreams.map((s) => s.name);
+    }
+    return STREAM_OPTIONS_BY_TIER[selectedTier] || STREAM_OPTIONS_BY_TIER["Primary"];
+  })();
 
   return (
     <div className="space-y-5 sm:space-y-8 animate-in fade-in-50 duration-300 w-full overflow-x-hidden">
@@ -833,6 +995,19 @@ export default function PrincipalClassesPage() {
         >
           <FolderKanban className="h-3.5 w-3.5" />
           <span>Academic Departments ({totalDepartments})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("streams")}
+          className={cn(
+            "px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0",
+            activeTab === "streams"
+              ? "bg-seneca-crimson text-white shadow-md shadow-seneca-crimson/20"
+              : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Academic Streams ({streams.length})</span>
         </button>
 
         <button
@@ -1493,6 +1668,217 @@ export default function PrincipalClassesPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: ACADEMIC STREAMS & CURRICULUM TRACKS (LIVE DATABASE)                  */}
+      {/* ========================================================================= */}
+      {activeTab === "streams" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base sm:text-lg font-bold font-heading text-foreground flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-seneca-crimson" />
+                <span>Curriculum Tracks & Academic Streams (Live Database)</span>
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Manage specialized academic tracks across all tiers (Pre-Medical, Pre-Engineering, ICS, I.Com, Matric Science, Cambridge CAIE) stored in MongoDB.
+              </p>
+            </div>
+            <Button
+              onClick={handleOpenCreateStreamModal}
+              variant="glow"
+              size="sm"
+              className="rounded-xl text-xs font-bold gap-1.5 self-start sm:self-auto"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Academic Stream</span>
+            </Button>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-2xl bg-muted/40 border border-border/80">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Total Streams in DB</span>
+              <span className="text-lg font-extrabold text-foreground">{streams.length} Tracks</span>
+            </div>
+            <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">Active in Enrollment</span>
+              <span className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300">
+                {streams.filter((s) => s.status === "active").length} Active
+              </span>
+            </div>
+            <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+              <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider block">Higher Secondary (College)</span>
+              <span className="text-lg font-extrabold text-indigo-700 dark:text-indigo-300">
+                {streams.filter((s) => s.tier === "Higher Secondary").length} Tracks
+              </span>
+            </div>
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">Secondary (Matric/O-Level)</span>
+              <span className="text-lg font-extrabold text-amber-700 dark:text-amber-300">
+                {streams.filter((s) => s.tier === "Secondary").length} Tracks
+              </span>
+            </div>
+          </div>
+
+          {/* Search & Tier Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-card border border-border/80">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search streams by title, code, keywords..."
+                value={streamSearch}
+                onChange={(e) => setStreamSearch(e.target.value)}
+                className="pl-9 h-9 text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={streamTierFilter}
+                onChange={(e) => setStreamTierFilter(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none"
+              >
+                <option value="all">All Academic Tiers</option>
+                <option value="Higher Secondary">Higher Secondary / College</option>
+                <option value="Secondary">Secondary / Matric & O-Level</option>
+                <option value="Middle">Middle Wing (Grades 6–8)</option>
+                <option value="Primary">Primary Wing (Grades 1–5)</option>
+                <option value="Preschool">Preschool / Early Years</option>
+                <option value="All">All Tiers (Universal)</option>
+              </select>
+
+              <select
+                value={streamStatusFilter}
+                onChange={(e) => setStreamStatusFilter(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active Only</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Streams Grid */}
+          {loadingStreams ? (
+            <div className="p-12 flex flex-col items-center justify-center space-y-2">
+              <Loader2 className="h-6 w-6 animate-spin text-seneca-crimson" />
+              <p className="text-xs font-bold text-muted-foreground">Loading Academic Streams from MongoDB...</p>
+            </div>
+          ) : (() => {
+            const filtered = streams.filter((st) => {
+              if (streamTierFilter !== "all" && st.tier !== streamTierFilter && st.tier !== "All") return false;
+              if (streamStatusFilter !== "all" && st.status !== streamStatusFilter) return false;
+              if (streamSearch.trim()) {
+                const q = streamSearch.toLowerCase();
+                const nameMatch = st.name.toLowerCase().includes(q);
+                const codeMatch = (st.code || "").toLowerCase().includes(q);
+                const descMatch = (st.description || "").toLowerCase().includes(q);
+                if (!nameMatch && !codeMatch && !descMatch) return false;
+              }
+              return true;
+            });
+
+            if (filtered.length === 0) {
+              return (
+                <Card className="border border-border/80 bg-card/90 rounded-2xl p-8 text-center space-y-3">
+                  <Sparkles className="h-10 w-10 text-muted-foreground mx-auto" />
+                  <p className="text-xs text-muted-foreground">No academic streams found matching current filters.</p>
+                  <Button onClick={handleOpenCreateStreamModal} variant="outline" size="sm" className="rounded-xl text-xs font-bold">
+                    Add Academic Stream
+                  </Button>
+                </Card>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filtered.map((st) => {
+                  const affiliatedClassCount = classes.filter((c) => (c.stream || "").toLowerCase() === st.name.toLowerCase()).length;
+
+                  const tierColor =
+                    st.tier === "Preschool"
+                      ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
+                      : st.tier === "Primary"
+                      ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                      : st.tier === "Middle"
+                      ? "bg-cyan-500/10 text-cyan-600 border-cyan-500/20"
+                      : st.tier === "Secondary"
+                      ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                      : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+
+                  return (
+                    <Card
+                      key={st.id || st._id}
+                      className="border border-border/80 bg-card/95 shadow-md rounded-2xl p-4 sm:p-5 space-y-3.5 hover:border-seneca-crimson/40 transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-seneca-crimson" />
+                            <h4 className="font-bold text-xs sm:text-sm text-foreground truncate" title={st.name}>
+                              {st.name}
+                            </h4>
+                          </div>
+                          {st.code && (
+                            <span className="font-mono text-[10px] font-extrabold text-muted-foreground uppercase px-1.5 py-0.5 rounded bg-muted">
+                              {st.code}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <Badge variant="outline" className={cn("text-[9px] font-bold", tierColor)}>
+                            {st.tier}
+                          </Badge>
+                          {st.status === "archived" && (
+                            <Badge variant="secondary" className="text-[8px] bg-muted text-muted-foreground">
+                              Archived
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground line-clamp-2 min-h-[32px]">
+                        {st.description || "Specialized academic curriculum track tailored for Seneca Academy students."}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-border/60 text-xs">
+                        <span className="font-semibold text-muted-foreground text-[11px]">
+                          <strong className="text-foreground">{affiliatedClassCount}</strong> Active Classes
+                        </span>
+
+                        <div className="flex items-center gap-1">
+                          <Button
+                            onClick={() => handleOpenEditStreamModal(st)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs font-bold text-seneca-amber"
+                          >
+                            <Edit className="h-3.5 w-3.5 mr-1" />
+                            <span>Edit</span>
+                          </Button>
+                          <Button
+                            onClick={() => handleDeleteStream(st)}
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-rose-500 hover:bg-rose-500/10"
+                            title="Delete / Archive Stream"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2242,6 +2628,154 @@ export default function PrincipalClassesPage() {
         variant="destructive"
         icon="trash"
         onConfirm={handleConfirmDeleteDept}
+      />
+
+      {/* Create / Edit Academic Stream Dialog */}
+      <Dialog open={createStreamModalOpen} onOpenChange={setCreateStreamModalOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] sm:w-full max-w-lg rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-2xl p-5 sm:p-6">
+          <DialogHeader className="border-b border-border/60 pb-3">
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <Sparkles className="h-5 w-5 text-seneca-crimson shrink-0" />
+              <span>{editingStream ? "Edit Academic Stream / Track" : "Create New Academic Stream"}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              {editingStream
+                ? "Update stream properties, applicable tier, code, or description in MongoDB."
+                : "Add a specialized curriculum track to the database. It will immediately be available in Student Enrollment and Class Setup."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateOrEditStreamSubmit} className="space-y-4 py-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>Stream / Track Title <span className="text-seneca-crimson">*</span></span>
+                <span className="text-[10px] text-muted-foreground font-normal">e.g. FSc Pre-Medical (Biology, Chemistry, Physics)</span>
+              </label>
+              <Input
+                required
+                placeholder="e.g. FSc Pre-Medical (Biology, Chemistry, Physics)"
+                value={streamFormName}
+                onChange={(e) => setStreamFormName(e.target.value)}
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">
+                  Applicable Grade Tier <span className="text-seneca-crimson">*</span>
+                </label>
+                <select
+                  value={streamFormTier}
+                  onChange={(e) => setStreamFormTier(e.target.value as any)}
+                  className="h-10 w-full px-3 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none"
+                >
+                  <option value="Higher Secondary">Higher Secondary / College</option>
+                  <option value="Secondary">Secondary / Matric</option>
+                  <option value="Middle">Middle Wing</option>
+                  <option value="Primary">Primary Wing</option>
+                  <option value="Preschool">Preschool / Early Years</option>
+                  <option value="All">All Grade Levels</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                  <span>Stream Code</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+                </label>
+                <Input
+                  placeholder="e.g. FSC-MED"
+                  value={streamFormCode}
+                  onChange={(e) => setStreamFormCode(e.target.value.toUpperCase())}
+                  className="h-10 text-xs rounded-xl uppercase"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>Description & Focus Areas</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+              </label>
+              <Input
+                placeholder="e.g. Biology, Chemistry, Physics track for pre-medical aspirants"
+                value={streamFormDescription}
+                onChange={(e) => setStreamFormDescription(e.target.value)}
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Status</label>
+                <select
+                  value={streamFormStatus}
+                  onChange={(e) => setStreamFormStatus(e.target.value as any)}
+                  className="h-10 w-full px-3 rounded-xl bg-background border border-border text-xs font-semibold text-foreground focus:ring-2 focus:ring-seneca-crimson/30 outline-none"
+                >
+                  <option value="active">Active (Available in Dropdowns)</option>
+                  <option value="archived">Archived (Hidden from Intake)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  type="checkbox"
+                  id="streamDefaultCheck"
+                  checked={streamFormIsDefault}
+                  onChange={(e) => setStreamFormIsDefault(e.target.checked)}
+                  className="h-4 w-4 rounded accent-seneca-crimson"
+                />
+                <label htmlFor="streamDefaultCheck" className="text-xs font-semibold text-foreground cursor-pointer">
+                  Default track for this tier
+                </label>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-3 flex flex-row items-center justify-end gap-2 border-t border-border/60">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateStreamModalOpen(false)}
+                disabled={savingStream}
+                className="rounded-xl text-xs font-bold h-9"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={savingStream || !streamFormName.trim()}
+                className="bg-seneca-crimson hover:bg-seneca-crimson/90 text-white font-bold text-xs rounded-xl h-9 shadow-sm"
+              >
+                {savingStream ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    <span>{editingStream ? "Update Stream" : "Save Stream to DB"}</span>
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete / Archive Academic Stream Confirmation Dialog */}
+      <ConfirmDialog
+        open={!!streamToDelete}
+        onOpenChange={(open) => !open && setStreamToDelete(null)}
+        title="Remove / Archive Academic Stream?"
+        description={`Are you sure you want to remove '${streamToDelete?.name}' from the database? If any classes or students are using it, it will be safely archived.`}
+        confirmText="Yes, Process Stream"
+        variant="destructive"
+        icon="trash"
+        onConfirm={handleConfirmDeleteStream}
       />
 
       {/* Bulk CSV Import Modal */}
