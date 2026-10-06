@@ -74,6 +74,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import CsvImportModal from "@/components/dashboard/CsvImportModal";
+import SubjectExportModal from "@/components/dashboard/SubjectExportModal";
 import { SUBJECT_IMPORT_COLUMNS, SUBJECT_SAMPLE_DATA } from "@/lib/utils/csv-helper";
 import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
 import { isJuniorGrade, isSeniorGrade } from "@/lib/constants/campus-wing";
@@ -216,9 +217,10 @@ export default function PrincipalSubjectsPage() {
   const [selectedCreditFilter, setSelectedCreditFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
-  // Modal States (Supports both Create and Edit)
+  // Modal States (Supports both Create, Edit, Import, and Export)
   const [modalOpen, setModalOpen] = useState(false);
   const [importCsvModalOpen, setImportCsvModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<SubjectData | null>(null);
@@ -626,7 +628,7 @@ export default function PrincipalSubjectsPage() {
             </Link>
 
             <Button
-              onClick={handleExportCSV}
+              onClick={() => setExportModalOpen(true)}
               variant="outline"
               size="sm"
               className="rounded-xl text-xs font-bold gap-1.5 h-10 bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm"
@@ -1959,6 +1961,15 @@ export default function PrincipalSubjectsPage() {
         variant="destructive"
         icon="trash"
         onConfirm={handleConfirmDeleteSubject}
+      />
+
+      {/* Institutional Subject Syllabus Export Modal */}
+      <SubjectExportModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        filteredSubjects={filteredSubjects}
+        allSubjects={subjects}
+        departments={Array.from(new Set(subjects.map((s) => s.department).filter(Boolean)))}
       />
 
       {/* Bulk CSV Import Modal */}

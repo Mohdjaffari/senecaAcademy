@@ -96,6 +96,7 @@ import {
 } from "@/lib/constants/academic-spectrum";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import CsvImportModal from "@/components/dashboard/CsvImportModal";
+import StudentExportModal from "@/components/dashboard/StudentExportModal";
 import { STUDENT_IMPORT_COLUMNS, STUDENT_SAMPLE_DATA } from "@/lib/utils/csv-helper";
 import { useCampusPortal } from "@/lib/hooks/useCampusPortal";
 
@@ -539,6 +540,7 @@ export default function PrincipalStudentsPage() {
 
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [importCsvModalOpen, setImportCsvModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<StudentData | null>(null);
   const [previewDocModal, setPreviewDocModal] = useState<{ url: string; title: string } | null>(null);
@@ -2078,12 +2080,12 @@ export default function PrincipalStudentsPage() {
           {/* Action Buttons */}
           <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <Button
-              onClick={handleExportCSV}
+              onClick={() => setExportModalOpen(true)}
               variant="outline"
               size="sm"
-              className="rounded-xl font-bold text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm w-full sm:w-auto justify-center"
+              className="rounded-xl font-bold text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-sm w-full sm:w-auto justify-center gap-1.5"
             >
-              <Download className="h-3.5 w-3.5 mr-1.5" />
+              <Download className="h-3.5 w-3.5 mr-0.5" />
               <span>Export Roster (CSV)</span>
             </Button>
             <Button
@@ -6379,6 +6381,15 @@ export default function PrincipalStudentsPage() {
         variant="destructive"
         icon="trash"
         onConfirm={handleConfirmDeleteStudent}
+      />
+
+      {/* Institutional Student Roster Export Modal */}
+      <StudentExportModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        filteredStudents={filteredStudents}
+        allStudents={students}
+        campusWing={activeWing || selectedWingFilter}
       />
 
       {/* Bulk CSV Import Modal */}

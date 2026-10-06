@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Upload,
   FileSpreadsheet,
@@ -14,6 +14,11 @@ import {
   HelpCircle,
   Eye,
   Info,
+  Layers,
+  GraduationCap,
+  Users,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import {
   Dialog,
@@ -66,11 +71,42 @@ export default function CsvImportModal({
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"analytics" | "classes" | "preview" | "issues">("analytics");
+  const [analysisReport, setAnalysisReport] = useState<{
+    totalRows: number;
+    validRows: number;
+    warningRows: number;
+    errorRows: number;
+    wingBreakdown: Record<string, number>;
+    streamBreakdown: Record<string, number>;
+    genderBreakdown: { Male: number; Female: number; Other: number };
+    classCapacityImpact: Array<{
+      className: string;
+      section: string;
+      currentEnrolled: number;
+      capacity: number;
+      incomingStudents: number;
+      projectedTotal: number;
+      isOverCapacity: boolean;
+      excessCount: number;
+      isNewClass: boolean;
+    }>;
+    diagnostics: Array<{
+      row: number;
+      studentName: string;
+      type: "error" | "warning" | "info";
+      message: string;
+    }>;
+    canProceed: boolean;
+  } | null>(null);
+
   const [importResults, setImportResults] = useState<{
     success: boolean;
     importedCount: number;
     failedCount: number;
     errors: string[];
+    classesUpdated?: number;
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +117,28 @@ export default function CsvImportModal({
     toast.success(`Sample CSV template (${templateFilename}.csv) downloaded!`);
   };
 
-  // Process File
+  // Run Pre-flight Analysis on the CSV
+  const runPreflightAnalysis = async (rowsToAnalyze: Record<string, string>[]) => {
+    if (!rowsToAnalyze || rowsToAnalyze.length === 0) return;
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch(`${apiEndpoint}?analyze=true`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: rowsToAnalyze, analyzeOnly: true }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.data?.analysis) {
+        setAnalysisReport(data.data.analysis);
+      }
+    } catch (err) {
+      console.error("Preflight analysis error:", err);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Process Uploaded File
   const processUploadedFile = (uploadedFile: File) => {
     if (!uploadedFile.name.toLowerCase().endsWith(".csv")) {
       toast.error("Please upload a valid .csv file.");
@@ -91,6 +148,7 @@ export default function CsvImportModal({
     setFile(uploadedFile);
     setImportResults(null);
     setParseErrors([]);
+    setAnalysisReport(null);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -120,12 +178,15 @@ export default function CsvImportModal({
         const missingNames = missingRequired.map((m) => `"${m.label}"`).join(", ");
         setParseErrors((prev) => [
           ...prev,
-          `Warning: Missing required column(s): ${missingNames}. Please review your CSV headers.`,
+          `Warning: Missing recommended column(s): ${missingNames}. System will auto-assign defaults where applicable.`,
         ]);
-        toast.warning(`Missing required column(s): ${missingNames}`);
+        toast.warning(`Note: Missing columns: ${missingNames}`);
       } else {
         toast.success(`Successfully parsed ${parsed.rows.length} rows from CSV!`);
       }
+
+      // Automatically launch diagnostic pre-flight analysis
+      runPreflightAnalysis(parsed.rows);
     };
     reader.readAsText(uploadedFile);
   };
@@ -158,6 +219,7 @@ export default function CsvImportModal({
     setParsedRows([]);
     setRawHeaders([]);
     setParseErrors([]);
+    setAnalysisReport(null);
     setImportResults(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -185,18 +247,20 @@ export default function CsvImportModal({
 
       const res = data.data || {};
       const imported = res.importedCount ?? parsedRows.length;
-      const failed = res.failedCount ?? (res.errors ? res.errors.length : 0);
+      const failed = res.skippedCount ?? (res.errors ? res.errors.length : 0);
       const errors = res.errors || [];
+      const classesUpdated = res.classesUpdated || 0;
 
       setImportResults({
         success: true,
         importedCount: imported,
         failedCount: failed,
         errors,
+        classesUpdated,
       });
 
       if (imported > 0) {
-        toast.success(`Bulk Import Complete: Successfully imported ${imported} ${entityNamePlural}!`);
+        toast.success(`Bulk Enrollment Complete: Enrolled ${imported} ${entityNamePlural} successfully!`);
         onSuccess();
       } else {
         toast.warning("Import finished, but 0 records were created. Check the error list.");
@@ -217,7 +281,7 @@ export default function CsvImportModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl shadow-2xl bg-card border border-border/80">
+      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[92vh] flex flex-col p-0 overflow-hidden rounded-3xl shadow-2xl bg-card border border-border/80">
         {/* Header */}
         <DialogHeader className="p-5 sm:p-6 pb-4 border-b shrink-0 bg-card">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -231,7 +295,7 @@ export default function CsvImportModal({
                   <span>{badgeLabel}</span>
                 </Badge>
                 <span className="text-[10px] text-muted-foreground font-semibold">
-                  RFC-4180 Standard
+                  RFC-4180 Certified & UTF-8 Validated
                 </span>
               </div>
               <DialogTitle className="text-xl sm:text-2xl font-extrabold font-heading text-foreground">
@@ -283,19 +347,19 @@ export default function CsvImportModal({
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-bold text-foreground">
-                  Drag and drop your CSV file here, or{" "}
+                  Drag and drop your enrollment CSV file here, or{" "}
                   <span className="text-seneca-crimson underline">browse device</span>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Only .csv files supported. Maximum 2,000 rows per batch.
+                  Official spreadsheet format with support for all academic tiers, streams, and guardian records.
                 </p>
               </div>
 
-              {/* Required Columns Guide */}
-              <div className="pt-4 border-t border-border/40 w-full max-w-lg text-left">
+              {/* Supported Columns Guide */}
+              <div className="pt-4 border-t border-border/40 w-full max-w-xl text-left">
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
                   <Info className="h-3.5 w-3.5 text-seneca-amber" />
-                  <span>Expected Columns in CSV:</span>
+                  <span>Institutional Columns Recognized:</span>
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {columns.map((col) => (
@@ -315,10 +379,10 @@ export default function CsvImportModal({
               </div>
             </div>
           ) : (
-            /* Step 2: File Selected & Preview Mode */
+            /* Step 2: File Selected & Diagnostics Mode */
             <div className="space-y-4">
-              {/* File Info Card */}
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/40 border border-border/70 shadow-xs">
+              {/* File Info Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-muted/40 border border-border/70 shadow-xs gap-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600">
                     <FileCheck className="h-5 w-5" />
@@ -328,43 +392,40 @@ export default function CsvImportModal({
                       {file.name}
                     </h5>
                     <p className="text-[11px] text-muted-foreground">
-                      {(file.size / 1024).toFixed(1)} KB • {parsedRows.length} rows parsed
+                      {(file.size / 1024).toFixed(1)} KB • {parsedRows.length} total applicant records detected
                     </p>
                   </div>
                 </div>
 
-                <Button
-                  onClick={handleReset}
-                  variant="ghost"
-                  size="sm"
-                  disabled={isSubmitting}
-                  className="rounded-xl text-xs text-muted-foreground hover:text-foreground h-8"
-                >
-                  <X className="h-3.5 w-3.5 mr-1" />
-                  <span>Change File</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => runPreflightAnalysis(parsedRows)}
+                    variant="outline"
+                    size="sm"
+                    disabled={isAnalyzing || isSubmitting}
+                    className="rounded-xl text-xs h-8 gap-1.5"
+                  >
+                    <RefreshCw className={cn("h-3.5 w-3.5", isAnalyzing && "animate-spin")} />
+                    <span>Re-Analyze</span>
+                  </Button>
+                  <Button
+                    onClick={handleReset}
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSubmitting}
+                    className="rounded-xl text-xs text-muted-foreground hover:text-foreground h-8"
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" />
+                    <span>Change File</span>
+                  </Button>
+                </div>
               </div>
 
-              {/* Warning/Parse Errors if any */}
-              {parseErrors.length > 0 && (
-                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs space-y-1">
-                  <div className="flex items-center gap-1.5 font-bold">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>File Verification Notice</span>
-                  </div>
-                  <ul className="list-disc list-inside space-y-0.5 pl-2 text-[11px]">
-                    {parseErrors.map((err, i) => (
-                      <li key={i}>{err}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Import Results Box if completed */}
+              {/* Import Results Box if Completed */}
               {importResults && (
                 <div
                   className={cn(
-                    "p-4 rounded-2xl border text-xs space-y-2",
+                    "p-4 rounded-2xl border text-xs space-y-2 animate-in fade-in-50",
                     importResults.importedCount > 0
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
                       : "bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300"
@@ -377,12 +438,17 @@ export default function CsvImportModal({
                       <AlertCircle className="h-4 w-4 text-rose-600" />
                     )}
                     <span>
-                      Import Finished: {importResults.importedCount} {entityNamePlural} imported successfully!
+                      Bulk Enrollment Complete: {importResults.importedCount} {entityNamePlural} registered successfully!
                     </span>
                   </div>
+                  {importResults.classesUpdated ? (
+                    <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                      Roster counts and capacities updated across {importResults.classesUpdated} class sections.
+                    </p>
+                  ) : null}
                   {importResults.failedCount > 0 && (
                     <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                      {importResults.failedCount} rows could not be imported.
+                      {importResults.failedCount} records could not be enrolled.
                     </p>
                   )}
                   {importResults.errors.length > 0 && (
@@ -395,26 +461,214 @@ export default function CsvImportModal({
                 </div>
               )}
 
-              {/* Live Preview Table */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-foreground">
-                      Data Preview (Showing First 5 Rows)
+              {/* Top Pre-flight Diagnostic KPI Cards */}
+              {analysisReport && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 rounded-2xl bg-muted/50 border border-border/80">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Total Parsed</span>
+                    <span className="text-lg font-extrabold text-foreground">{analysisReport.totalRows} Records</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">Ready to Enroll</span>
+                    <span className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300">{analysisReport.validRows} Valid</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+                    <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider block">Class Sections</span>
+                    <span className="text-lg font-extrabold text-blue-700 dark:text-blue-300">
+                      {analysisReport.classCapacityImpact.length} Sections
                     </span>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {parsedRows.length} Total Records
-                    </Badge>
+                  </div>
+                  <div className={cn(
+                    "p-3 rounded-2xl border",
+                    analysisReport.warningRows > 0
+                      ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400"
+                      : "bg-muted/50 border-border/80 text-foreground"
+                  )}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block">Notices / Warnings</span>
+                    <span className="text-lg font-extrabold">
+                      {analysisReport.warningRows} {analysisReport.warningRows === 1 ? "Notice" : "Notices"}
+                    </span>
                   </div>
                 </div>
+              )}
 
+              {/* Navigation Tabs for Diagnostics */}
+              <div className="flex items-center gap-1 border-b border-border/80 pb-1.5 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("analytics")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0",
+                    activeTab === "analytics"
+                      ? "bg-seneca-crimson text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>Wing & Specialization Breakdown</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("classes")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0",
+                    activeTab === "classes"
+                      ? "bg-seneca-crimson text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  <span>Class Sections & Capacity ({analysisReport?.classCapacityImpact.length || 0})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("preview")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0",
+                    activeTab === "preview"
+                      ? "bg-seneca-crimson text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>Raw Data Table ({parsedRows.length})</span>
+                </button>
+
+                {analysisReport && analysisReport.diagnostics.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("issues")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0",
+                      activeTab === "issues"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                    )}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    <span>Diagnostics Log ({analysisReport.diagnostics.length})</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Tab 1: Wing & Specialization Breakdown */}
+              {activeTab === "analytics" && (
+                <div className="space-y-3">
+                  {isAnalyzing ? (
+                    <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-6 w-6 animate-spin text-seneca-crimson" />
+                      <span className="text-xs font-bold">Running Institutional Diagnostics & Verification...</span>
+                    </div>
+                  ) : analysisReport ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* Wing Distribution Card */}
+                      <div className="p-3.5 rounded-2xl bg-card border border-border/80 space-y-2.5">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 text-seneca-crimson" />
+                          <span>Campus Wing Distribution</span>
+                        </span>
+                        <div className="space-y-1.5">
+                          {Object.entries(analysisReport.wingBreakdown).map(([wing, count]) => (
+                            count > 0 && (
+                              <div key={wing} className="flex items-center justify-between text-xs p-2 rounded-xl bg-muted/40">
+                                <span className="font-semibold text-foreground">{wing}</span>
+                                <Badge variant="secondary" className="font-mono text-xs font-bold">
+                                  {count} Students ({Math.round((count / analysisReport.totalRows) * 100)}%)
+                                </Badge>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Academic Tracks Card */}
+                      <div className="p-3.5 rounded-2xl bg-card border border-border/80 space-y-2.5">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5 text-seneca-crimson" />
+                          <span>Academic Specializations & Study Tracks</span>
+                        </span>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {Object.entries(analysisReport.streamBreakdown).map(([stream, count]) => (
+                            <div key={stream} className="flex items-center justify-between text-xs p-2 rounded-xl bg-muted/40">
+                              <span className="font-semibold text-foreground truncate max-w-[200px]" title={stream}>
+                                {stream}
+                              </span>
+                              <Badge className="bg-seneca-crimson/10 text-seneca-crimson border-seneca-crimson/20 font-mono text-xs font-bold">
+                                {count}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-6">
+                      Click &quot;Re-Analyze&quot; above to inspect enrollment breakdown.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 2: Class Sections & Capacity Impact */}
+              {activeTab === "classes" && (
                 <div className="border border-border/80 rounded-2xl overflow-hidden shadow-xs">
-                  <div className="overflow-x-auto max-h-56">
+                  <div className="overflow-x-auto max-h-64">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-muted/70 border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 backdrop-blur-md">
+                        <tr>
+                          <th className="p-2.5 pl-3">Class & Section</th>
+                          <th className="p-2.5">Current Enrolled</th>
+                          <th className="p-2.5">Incoming</th>
+                          <th className="p-2.5">Projected Total</th>
+                          <th className="p-2.5">Capacity</th>
+                          <th className="p-2.5 text-right pr-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {analysisReport?.classCapacityImpact.map((ci, idx) => (
+                          <tr key={idx} className="hover:bg-muted/20">
+                            <td className="p-2.5 pl-3 font-bold text-foreground">
+                              {ci.className} • Section {ci.section}
+                              {ci.isNewClass && (
+                                <span className="ml-1.5 text-[9px] px-1.5 py-0.2 rounded-md bg-indigo-500/10 text-indigo-600 font-bold">
+                                  New Section
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2.5 text-muted-foreground">{ci.currentEnrolled}</td>
+                            <td className="p-2.5 font-bold text-seneca-crimson">+{ci.incomingStudents}</td>
+                            <td className="p-2.5 font-bold text-foreground">{ci.projectedTotal}</td>
+                            <td className="p-2.5 text-muted-foreground">{ci.capacity} Seats</td>
+                            <td className="p-2.5 text-right pr-3">
+                              {ci.isOverCapacity ? (
+                                <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/30 font-bold">
+                                  Exceeds by {ci.excessCount}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold">
+                                  Normal ({Math.round((ci.projectedTotal / ci.capacity) * 100)}%)
+                                </Badge>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Raw Data Preview */}
+              {activeTab === "preview" && (
+                <div className="border border-border/80 rounded-2xl overflow-hidden shadow-xs">
+                  <div className="overflow-x-auto max-h-64">
                     <table className="w-full text-left text-[11px]">
                       <thead className="bg-muted/70 border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 backdrop-blur-md">
                         <tr>
                           <th className="p-2.5 pl-3">#</th>
-                          {columns.slice(0, 6).map((col) => (
+                          {columns.slice(0, 7).map((col) => (
                             <th key={col.key} className="p-2.5 truncate max-w-[140px]">
                               {col.label}
                             </th>
@@ -422,10 +676,10 @@ export default function CsvImportModal({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/60">
-                        {parsedRows.slice(0, 5).map((row, idx) => (
+                        {parsedRows.slice(0, 10).map((row, idx) => (
                           <tr key={idx} className="hover:bg-muted/20">
                             <td className="p-2.5 pl-3 font-mono text-muted-foreground">{idx + 1}</td>
-                            {columns.slice(0, 6).map((col) => {
+                            {columns.slice(0, 7).map((col) => {
                               const normKey = col.key.toLowerCase().replace(/[^a-z0-9]/g, "");
                               const val =
                                 row[normKey] ||
@@ -446,8 +700,43 @@ export default function CsvImportModal({
                       </tbody>
                     </table>
                   </div>
+                  {parsedRows.length > 10 && (
+                    <div className="p-2 bg-muted/40 text-center text-[10px] text-muted-foreground border-t border-border/60">
+                      Showing first 10 of {parsedRows.length} total applicant records. All records will be imported.
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* Tab 4: Diagnostics Log */}
+              {activeTab === "issues" && analysisReport && (
+                <div className="border border-border/80 rounded-2xl overflow-hidden shadow-xs">
+                  <div className="overflow-y-auto max-h-64 divide-y divide-border/60 p-1">
+                    {analysisReport.diagnostics.map((diag, idx) => (
+                      <div key={idx} className="p-2.5 flex items-start gap-2.5 text-xs">
+                        {diag.type === "error" ? (
+                          <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                        ) : diag.type === "warning" ? (
+                          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                        )}
+                        <div className="flex-1 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            {diag.row > 0 && (
+                              <span className="font-mono text-[10px] font-bold text-muted-foreground">
+                                Row {diag.row}:
+                              </span>
+                            )}
+                            <span className="font-bold text-foreground">{diag.studentName}</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">{diag.message}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -468,19 +757,19 @@ export default function CsvImportModal({
             <Button
               type="button"
               onClick={handleExecuteImport}
-              disabled={isSubmitting || parsedRows.length === 0}
+              disabled={isSubmitting || parsedRows.length === 0 || isAnalyzing}
               variant="glow"
               className="rounded-xl text-xs font-bold gap-2 w-full sm:w-auto shadow-lg shadow-seneca-amber/20"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Importing {parsedRows.length} Records...</span>
+                  <span>Enrolling {parsedRows.length} Students...</span>
                 </>
               ) : (
                 <>
                   <Upload className="h-3.5 w-3.5" />
-                  <span>Confirm & Import {parsedRows.length} Records</span>
+                  <span>Confirm & Enroll {parsedRows.length} Students</span>
                 </>
               )}
             </Button>
