@@ -819,16 +819,18 @@ export default function PrincipalStudentsPage() {
     return [];
   })();
 
-  // Auto-align formStream with available database tracks
+  // Auto-align formStream with available database tracks when tier changes or streams load
   useEffect(() => {
     if (currentAvailableStreams.length > 0) {
       const exists = currentAvailableStreams.some((s) => s.name === formStream);
-      if (!exists && !formStream) {
+      if (!exists) {
         const defaultStream = currentAvailableStreams.find((s) => s.isDefault) || currentAvailableStreams[0];
-        setFormStream(defaultStream.name);
+        setFormStream(defaultStream?.name || "");
       }
+    } else {
+      setFormStream("");
     }
-  }, [currentAvailableStreams, formStream]);
+  }, [currentAvailableStreams, currentSelectedTier]);
 
   // Auto-generate IDs and Portal Email
   // Auto-generate IDs and Portal Email
@@ -3175,9 +3177,6 @@ export default function PrincipalStudentsPage() {
                               {st.name}{st.code ? ` (${st.code})` : ""}
                             </option>
                           ))}
-                          {formStream && !currentAvailableStreams.some((st) => st.name === formStream) && (
-                            <option value={formStream}>{formStream} (Assigned)</option>
-                          )}
                         </>
                       ) : (
                         <option value="" disabled>
